@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  # vLLM on AMD MI300X (uncomment on GPU node)
+  # vllm:
+  #   image: vllm/vllm-openai-rocm:latest
+  #   environment:
+  #     - VLLM_ROCM_USE_AITER=1
+  #     - HIP_FORCE_DEV_KERNARG=1
+  #     - NCCL_MIN_NCHANNELS=112
+  #   volumes:
+  #     - ${HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
+  #   devices:
+  #     - /dev/kfd
+  #     - /dev/dri
+  #   network_mode: host
+  #   command: >
+  #     vllm serve meta-llama/Llama-3.1-70B-Instruct
+  #       --host 0.0.0.0 --port 8000
+  #       --max-model-len 65536
+  #       --tensor-parallel-size 1
+  #       --dtype float16
+  #       --quantization fp8
+
+volumes:
+  qdrant_data:

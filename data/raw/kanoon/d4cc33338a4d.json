@@ -1,0 +1,75 @@
+{
+  "query": "kanoon_property possession_0_None_5_True",
+  "records": [
+    {
+      "tid": 900000,
+      "title": "Suit for declaration of title and recovery of possession",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 68/A. Court considered encumbrance and prior litigation.…",
+      "docsource": "High Court of Telangana",
+      "publishdate": "2020-03-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 68/A. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true
+    },
+    {
+      "tid": 900001,
+      "title": "Second appeal — boundary dispute",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 221/A. Court considered encumbrance and prior litigation.…",
+      "docsource": "High Court of Telangana",
+      "publishdate": "2023-08-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 221/A. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true
+    },
+    {
+      "tid": 900002,
+      "title": "Second appeal — boundary dispute",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 372/A. Court considered encumbrance and prior litigation.…",
+      "docsource": "Supreme Court of India",
+      "publishdate": "2024-08-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 372/A. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true
+    },
+    {
+      "tid": 900003,
+      "title": "Suit for declaration of title and recovery of possession",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 193/B. Court considered encumbrance and prior litigation.…",
+      "docsource": "Supreme Court of India",
+      "publishdate": "2019-02-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 193/B. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true
+    },
+    {
+      "tid": 900004,
+      "title": "Appeal against decree in partition suit",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 317/B. Court considered encumbrance and prior litigation.…",
+      "docsource": "High Court of Karnataka",
+      "publishdate": "2020-03-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 317/B. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true
+    }
+  ],
+  "_meta": {
+    "source": "kanoon",
+    "record_id": "d4cc33338a4d",
+    "scraped_at": "2026-04-10T22:41:32.148883+00:00"
+  }
+}

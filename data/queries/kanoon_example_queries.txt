@@ -1,0 +1,9 @@
+# One Indian Kanoon search per line (property / diligence oriented).
+# https://api.indiankanoon.org/documentation/ — operators: ANDD ORR NOTT (spaced).
+
+specific performance immovable property
+declaration of title possession survey
+mortgage encumbrance sale deed
+partition suit ancestral property
+mutation khata revenue record dispute
+Article 300A property right

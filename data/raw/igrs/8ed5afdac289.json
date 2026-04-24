@@ -1,0 +1,310 @@
+{
+  "query": "telangana_None_None_None_sale_deed",
+  "records": [
+    {
+      "state": "telangana",
+      "district": "Medchal-Malkajgiri",
+      "sro": "SRO Secunderabad",
+      "doc_type": "release",
+      "registration_date": "2016-02-24",
+      "document_number": "2016/3415",
+      "seller_names": [
+        "Priya Naidu"
+      ],
+      "buyer_names": [
+        "Suresh Singh"
+      ],
+      "consideration_amount": "29100000",
+      "property_description": "Plot No. 209, Survey No. 249/B, Extent: 2981 sq.yards",
+      "survey_numbers": [
+        "667/A"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Rangareddy",
+      "sro": "SRO Rajendranagar",
+      "doc_type": "sale_deed",
+      "registration_date": "2023-10-25",
+      "document_number": "2023/5912",
+      "seller_names": [
+        "Lakshmi Singh"
+      ],
+      "buyer_names": [
+        "Suresh Naidu"
+      ],
+      "consideration_amount": "28600000",
+      "property_description": "Plot No. 12, Survey No. 914/, Extent: 2147 sq.yards",
+      "survey_numbers": [
+        "719/C"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Hyderabad",
+      "sro": "SRO Rajendranagar",
+      "doc_type": "mortgage",
+      "registration_date": "2019-08-19",
+      "document_number": "2019/2695",
+      "seller_names": [
+        "Srinivas Naidu"
+      ],
+      "buyer_names": [
+        "Venkat Gupta"
+      ],
+      "consideration_amount": "40900000",
+      "property_description": "Plot No. 47, Survey No. 281/C, Extent: 1443 sq.yards",
+      "survey_numbers": [
+        "232/B"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Hyderabad",
+      "sro": "SRO Kukatpally",
+      "doc_type": "GPA",
+      "registration_date": "2025-08-26",
+      "document_number": "2025/4845",
+      "seller_names": [
+        "Venkat Singh"
+      ],
+      "buyer_names": [
+        "Srinivas Rao"
+      ],
+      "consideration_amount": "2800000",
+      "property_description": "Plot No. 161, Survey No. 957/B, Extent: 1434 sq.yards",
+      "survey_numbers": [
+        "342/A"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Hyderabad",
+      "sro": "SRO Musheerabad",
+      "doc_type": "GPA",
+      "registration_date": "2018-04-16",
+      "document_number": "2018/7421",
+      "seller_names": [
+        "Venkat Rao"
+      ],
+      "buyer_names": [
+        "Rajesh Gupta"
+      ],
+      "consideration_amount": "42900000",
+      "property_description": "Plot No. 38, Survey No. 332/C, Extent: 4458 sq.yards",
+      "survey_numbers": [
+        "153/C"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Medchal-Malkajgiri",
+      "sro": "SRO Rajendranagar",
+      "doc_type": "GPA",
+      "registration_date": "2024-06-01",
+      "document_number": "2024/8831",
+      "seller_names": [
+        "Deepa Naidu"
+      ],
+      "buyer_names": [
+        "Deepa Sharma"
+      ],
+      "consideration_amount": "35100000",
+      "property_description": "Plot No. 498, Survey No. 103/C, Extent: 1704 sq.yards",
+      "survey_numbers": [
+        "264/C"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Rangareddy",
+      "sro": "SRO Secunderabad",
+      "doc_type": "partition",
+      "registration_date": "2020-02-01",
+      "document_number": "2020/7274",
+      "seller_names": [
+        "Rajesh Kumar"
+      ],
+      "buyer_names": [
+        "Suresh Sharma"
+      ],
+      "consideration_amount": "28200000",
+      "property_description": "Plot No. 255, Survey No. 364/B, Extent: 2526 sq.yards",
+      "survey_numbers": [
+        "976/C"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Medchal-Malkajgiri",
+      "sro": "SRO Kukatpally",
+      "doc_type": "GPA",
+      "registration_date": "2016-08-27",
+      "document_number": "2016/2250",
+      "seller_names": [
+        "Venkat Naidu"
+      ],
+      "buyer_names": [
+        "Venkat Gupta"
+      ],
+      "consideration_amount": "1000000",
+      "property_description": "Plot No. 328, Survey No. 586/C, Extent: 2006 sq.yards",
+      "survey_numbers": [
+        "871/B"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Hyderabad",
+      "sro": "SRO Rajendranagar",
+      "doc_type": "partition",
+      "registration_date": "2017-01-13",
+      "document_number": "2017/1970",
+      "seller_names": [
+        "Priya Naidu"
+      ],
+      "buyer_names": [
+        "Lakshmi Gupta"
+      ],
+      "consideration_amount": "23400000",
+      "property_description": "Plot No. 355, Survey No. 93/A, Extent: 4122 sq.yards",
+      "survey_numbers": [
+        "405/C"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Sangareddy",
+      "sro": "SRO Kukatpally",
+      "doc_type": "mortgage",
+      "registration_date": "2020-09-08",
+      "document_number": "2020/3583",
+      "seller_names": [
+        "Srinivas Sharma"
+      ],
+      "buyer_names": [
+        "Srinivas Rao"
+      ],
+      "consideration_amount": "10700000",
+      "property_description": "Plot No. 323, Survey No. 685/A, Extent: 1808 sq.yards",
+      "survey_numbers": [
+        "919/B"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Hyderabad",
+      "sro": "SRO Musheerabad",
+      "doc_type": "release",
+      "registration_date": "2015-10-17",
+      "document_number": "2015/9608",
+      "seller_names": [
+        "Priya Gupta"
+      ],
+      "buyer_names": [
+        "Lakshmi Gupta"
+      ],
+      "consideration_amount": "39700000",
+      "property_description": "Plot No. 29, Survey No. 767/, Extent: 2513 sq.yards",
+      "survey_numbers": [
+        "15/A"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Rangareddy",
+      "sro": "SRO Rajendranagar",
+      "doc_type": "partition",
+      "registration_date": "2025-04-17",
+      "document_number": "2025/9243",
+      "seller_names": [
+        "Srinivas Gupta"
+      ],
+      "buyer_names": [
+        "Priya Sharma"
+      ],
+      "consideration_amount": "34500000",
+      "property_description": "Plot No. 497, Survey No. 926/C, Extent: 2197 sq.yards",
+      "survey_numbers": [
+        "597/B"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Hyderabad",
+      "sro": "SRO Rajendranagar",
+      "doc_type": "release",
+      "registration_date": "2017-12-17",
+      "document_number": "2017/2160",
+      "seller_names": [
+        "Suresh Sharma"
+      ],
+      "buyer_names": [
+        "Lakshmi Rao"
+      ],
+      "consideration_amount": "24700000",
+      "property_description": "Plot No. 265, Survey No. 241/A, Extent: 3441 sq.yards",
+      "survey_numbers": [
+        "991/A"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Hyderabad",
+      "sro": "SRO Musheerabad",
+      "doc_type": "mortgage",
+      "registration_date": "2020-03-19",
+      "document_number": "2020/8098",
+      "seller_names": [
+        "Lakshmi Reddy"
+      ],
+      "buyer_names": [
+        "Venkat Naidu"
+      ],
+      "consideration_amount": "34600000",
+      "property_description": "Plot No. 134, Survey No. 224/B, Extent: 3697 sq.yards",
+      "survey_numbers": [
+        "121/A"
+      ],
+      "is_synthetic": true
+    },
+    {
+      "state": "telangana",
+      "district": "Sangareddy",
+      "sro": "SRO Secunderabad",
+      "doc_type": "sale_deed",
+      "registration_date": "2020-07-18",
+      "document_number": "2020/4688",
+      "seller_names": [
+        "Lakshmi Rao"
+      ],
+      "buyer_names": [
+        "Srinivas Naidu"
+      ],
+      "consideration_amount": "22100000",
+      "property_description": "Plot No. 261, Survey No. 824/B, Extent: 2139 sq.yards",
+      "survey_numbers": [
+        "865/C"
+      ],
+      "is_synthetic": true
+    }
+  ],
+  "_meta": {
+    "source": "igrs",
+    "record_id": "8ed5afdac289",
+    "scraped_at": "2026-04-03T01:48:21.647734+00:00"
+  }
+}

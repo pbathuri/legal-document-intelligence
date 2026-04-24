@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "legal-document-intelligence"
+version = "0.2.0"
+description = "AI agent for legal & property document intelligence — AMD MI300X optimised"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+dependencies = [
+    # --- Core LLM / Agent ---
+    "langchain-openai>=0.3.0",
+    "langgraph>=0.4.0",
+    "langchain-core>=0.3.0",
+    # --- RAG ---
+    "qdrant-client>=1.12.0",
+    "sentence-transformers>=3.0.0",
+    # --- PDF / Ingest ---
+    "PyMuPDF>=1.24.0",
+    # --- OCR (optional; tesseract must be installed on system) ---
+    "Pillow>=10.0.0",
+    # --- Scraping (optional; install scrapling separately if needed) ---
+    "httpx>=0.27.0",
+    "aiofiles>=24.1.0",
+    # --- Config ---
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    # --- UI ---
+    "streamlit>=1.38.0",
+    # --- Utilities ---
+    "python-dotenv>=1.0.0",
+    "tenacity>=8.2.0",
+    "tqdm>=4.66.0",
+    "orjson>=3.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.5.0",
+    "pyarrow>=14.0.0",
+]
+scraping = [
+    "scrapling>=0.2",
+]
+ocr = [
+    "pytesseract>=0.3.10",
+]
+training = [
+    # For fine-tuning dataset prep (runs on AMD GPU node, not demo machine)
+    "datasets>=2.20.0",
+    "transformers>=4.44.0",
+    "pyarrow>=14.0.0",
+]
+observability = [
+    # Langfuse's CallbackHandler imports the `langchain` package (v1 uses langchain-core under the hood).
+    "langfuse>=2.0.0",
+    "langchain>=1.0.0",
+]
+gpu = [
+    # AMD ROCm inference stack (install on MI300X node only)
+    "vllm",
+    "torch",
+]
+
+[project.scripts]
+legal-diligence = "legal_intel.cli:main"
+legal-scrape = "legal_intel.scraper.cli:main"
+legal-scrape-bulk = "legal_intel.scraper.bulk_cli:main"
+legal-train-prep = "legal_intel.training.prepare:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,60 @@
+{
+  "query": "ecourts_Ramesh Kumar_None_3",
+  "records": [
+    {
+      "case_number": "WP (Writ Petition) No. 2437/2022",
+      "parties": "Ramesh Kumar vs State of Telangana & Others",
+      "status": "Pending - Next hearing scheduled",
+      "court": "District Court, Hyderabad",
+      "filing_date": "2022-11-05",
+      "property_related": true,
+      "subject": "Suit for permanent injunction",
+      "is_synthetic": true
+    },
+    {
+      "case_number": "OS (Original Suit) No. 101/2022",
+      "parties": "Ramesh Kumar vs State of Telangana & Others",
+      "status": "Transferred",
+      "court": "District Court, Rangareddy",
+      "filing_date": "2022-07-07",
+      "property_related": true,
+      "subject": "Suit for specific performance of agreement of sale",
+      "is_synthetic": true
+    },
+    {
+      "case_number": "CRP (Civil Revision Petition) No. 7921/2022",
+      "parties": "Ramesh Kumar vs State of Telangana & Others",
+      "status": "Pending",
+      "court": "District Court, Hyderabad",
+      "filing_date": "2022-02-26",
+      "property_related": true,
+      "subject": "Suit for declaration of title and possession",
+      "is_synthetic": true
+    },
+    {
+      "case_number": "OS (Original Suit) No. 2269/2025",
+      "parties": "Ramesh Kumar vs State of Telangana & Others",
+      "status": "Disposed",
+      "court": "District Court, Rangareddy",
+      "filing_date": "2025-08-06",
+      "property_related": true,
+      "subject": "Suit for declaration of title and possession",
+      "is_synthetic": true
+    },
+    {
+      "case_number": "SA (Second Appeal) No. 9823/2018",
+      "parties": "Ramesh Kumar vs State of Telangana & Others",
+      "status": "Disposed",
+      "court": "District Court, Hyderabad",
+      "filing_date": "2018-05-18",
+      "property_related": true,
+      "subject": "Suit for permanent injunction",
+      "is_synthetic": true
+    }
+  ],
+  "_meta": {
+    "source": "ecourts",
+    "record_id": "1d8675709ae3",
+    "scraped_at": "2026-04-03T01:48:22.163473+00:00"
+  }
+}

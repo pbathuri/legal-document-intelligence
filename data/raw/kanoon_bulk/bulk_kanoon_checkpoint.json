@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "corpus_path": "data/raw/kanoon_bulk/kanoon_corpus.jsonl",
+  "queries_completed": [
+    "specific performance immovable property",
+    "declaration of title possession survey",
+    "mortgage encumbrance sale deed",
+    "partition suit ancestral property",
+    "mutation khata revenue record dispute",
+    "Article 300A property right"
+  ],
+  "current_query": null,
+  "next_pagenum": 0,
+  "search_requests_this_query": 0,
+  "records_appended_this_run": 5750,
+  "full_text_fetched_this_run": 0
+}

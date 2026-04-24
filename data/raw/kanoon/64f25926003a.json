@@ -1,0 +1,23 @@
+{
+  "query": "kanoon_q_0_None_1_True",
+  "records": [
+    {
+      "tid": 900000,
+      "title": "Writ challenging mutation entry",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 385/B. Court considered encumbrance and prior litigation.…",
+      "docsource": "High Court of Karnataka",
+      "publishdate": "2024-08-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 385/B. Court considered encumbrance and prior litigation.",
+      "query": "q",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true
+    }
+  ],
+  "_meta": {
+    "source": "kanoon",
+    "record_id": "64f25926003a",
+    "scraped_at": "2026-04-10T22:35:19.694511+00:00"
+  }
+}

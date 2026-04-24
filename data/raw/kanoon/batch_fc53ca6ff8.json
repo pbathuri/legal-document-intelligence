@@ -1,0 +1,79 @@
+{
+  "records": [
+    {
+      "tid": 900000,
+      "title": "Suit for declaration of title and recovery of possession",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 68/A. Court considered encumbrance and prior litigation.…",
+      "docsource": "High Court of Telangana",
+      "publishdate": "2020-03-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 68/A. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true,
+      "_canonical_source": "kanoon",
+      "_record_id": "dcbc731a51dd24e0"
+    },
+    {
+      "tid": 900001,
+      "title": "Second appeal — boundary dispute",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 221/A. Court considered encumbrance and prior litigation.…",
+      "docsource": "High Court of Telangana",
+      "publishdate": "2023-08-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 221/A. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true,
+      "_canonical_source": "kanoon",
+      "_record_id": "81e740339b5f5d64"
+    },
+    {
+      "tid": 900002,
+      "title": "Second appeal — boundary dispute",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 372/A. Court considered encumbrance and prior litigation.…",
+      "docsource": "Supreme Court of India",
+      "publishdate": "2024-08-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 372/A. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true,
+      "_canonical_source": "kanoon",
+      "_record_id": "4756179324482be3"
+    },
+    {
+      "tid": 900003,
+      "title": "Suit for declaration of title and recovery of possession",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 193/B. Court considered encumbrance and prior litigation.…",
+      "docsource": "Supreme Court of India",
+      "publishdate": "2019-02-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 193/B. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true,
+      "_canonical_source": "kanoon",
+      "_record_id": "7540a5ed9ccb4074"
+    },
+    {
+      "tid": 900004,
+      "title": "Appeal against decree in partition suit",
+      "headline": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 317/B. Court considered encumbrance and prior litigation.…",
+      "docsource": "High Court of Karnataka",
+      "publishdate": "2020-03-01",
+      "full_text_plain": "The appellant claims title to the schedule property based on registered sale deed. The respondent disputes possession. Survey reference: 317/B. Court considered encumbrance and prior litigation.",
+      "query": "property possession",
+      "is_synthetic": true,
+      "doc_type": "court_judgment",
+      "document_type": "court_judgment",
+      "property_related": true,
+      "_canonical_source": "kanoon",
+      "_record_id": "c9db002d2ffc61c7"
+    }
+  ]
+}
