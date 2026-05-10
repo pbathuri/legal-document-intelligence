@@ -57,6 +57,11 @@ def _ollama_embed_probe() -> dict[str, Any]:
         return {"ok": False, "error": str(e)}
 
 
+def ollama_embed_probe_result() -> dict[str, Any]:
+    """Same probe as preflight / readiness — exposed for ``/v1/ollama/agent-stack`` diagnostics."""
+    return _ollama_embed_probe()
+
+
 def gather_preflight() -> dict[str, Any]:
     s = get_settings()
     checks: dict[str, Any] = {
@@ -105,7 +110,7 @@ def gather_preflight() -> dict[str, Any]:
     }
 
     checks["qdrant"] = _qdrant_ping()
-    checks["ollama_embed"] = _ollama_embed_probe()
+    checks["ollama_embed"] = ollama_embed_probe_result()
     checks["device"] = gather_device_profile()
 
     ready = bool(checks["qdrant"].get("ok"))

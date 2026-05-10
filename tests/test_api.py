@@ -1074,3 +1074,121 @@ def test_uploads_files_list(tmp_path, monkeypatch):
         names = {f["relative_path"] for f in body["files"]}
         assert "sample.bin" in names
     get_settings.cache_clear()
+
+
+def test_runtime_storage_inventory(tmp_path, monkeypatch):
+    up = tmp_path / "up"
+    up.mkdir()
+    (up / "a.pdf").write_bytes(b"%PDF-1 fake")
+    db = tmp_path / "runs.sqlite"
+    db.write_bytes(b"sqlite")
+    (up / "manifest.jsonl").write_text("{}\n{}\n", encoding="utf-8")
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_UPLOADS", "1")
+    monkeypatch.setenv("UPLOAD_STORAGE_DIR", str(up))
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.get("/v1/runtime/storage")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["upload_storage_file_count"] >= 2
+        assert body["runs_db_bytes"] == len(b"sqlite")
+        assert body["manifest_line_count"] == 2
+    get_settings.cache_clear()
+
+
+def test_ollama_agent_stack_mocked(monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from unittest.mock import patch
+
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with (
+        patch(
+            "legal_intel.runtime.ollama_agent_stack.fetch_ollama_model_names",
+            return_value=(["m1"], None),
+        ),
+        patch(
+            "legal_intel.runtime.ollama_agent_stack.ollama_native_version",
+            return_value={"version": "x.y"},
+        ),
+        patch(
+            "legal_intel.runtime.ollama_agent_stack.fetch_ollama_running_models",
+            return_value={"models": []},
+        ),
+    ):
+        with TestClient(app) as client:
+            r = client.get("/v1/ollama/agent-stack")
+            assert r.status_code == 200
+            j = r.json()
+            assert j["model_routing"]["specialist"]
+            assert j["daemon_version"]["version"] == "x.y"
+            assert j["api_tags"]["models"] == ["m1"]
+    get_settings.cache_clear()
+
+
+def test_document_summary_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="ss1",
+        doc_label="z.pdf",
+        chunks=[("Liquidated damages capped at two percent.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/document-summary/stream",
+        json={
+            "doc_id": "ss1",
+            "retrieval_query": "damages cap",
+            "instruction": "One sentence.",
+        },
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text
+    assert "done" in r.text
+
+
+def test_compare_documents_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="csa",
+        doc_label="a.pdf",
+        chunks=[("Fee is two percent of enterprise value.", {"page_start": 1, "page_end": 1})],
+    )
+    store.upsert_document_chunks(
+        doc_id="csb",
+        doc_label="b.pdf",
+        chunks=[("Success fee equals 2% of EV.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/compare-documents/stream",
+        json={
+            "doc_id_a": "csa",
+            "doc_id_b": "csb",
+            "retrieval_query": "fee percent",
+            "instruction": "Compare fee language.",
+        },
+    )
+    assert r.status_code == 200
+    assert "sources_a" in r.text
+    assert "token" in r.text or "MOCK" in r.text

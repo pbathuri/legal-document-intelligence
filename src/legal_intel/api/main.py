@@ -95,7 +95,9 @@ from legal_intel.runtime.ollama_probe import (
 )
 from legal_intel.runtime.ollama_warnings import build_ollama_model_warnings
 from legal_intel.runtime.ollama_deep import gather_ollama_host_snapshot
+from legal_intel.runtime.ollama_agent_stack import gather_ollama_agent_stack
 from legal_intel.runtime.preflight import gather_preflight
+from legal_intel.runtime.storage_inventory import gather_storage_inventory
 from legal_intel.runtime.uploads import persist_pdf_bytes
 from legal_intel.runtime.uploads_manifest import tail_upload_manifest
 
@@ -170,6 +172,46 @@ def _rag_sources_from_hits(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sources
 
 
+def _prepare_document_summary_parts(
+    body: DocumentSummaryRequest,
+) -> tuple[int, str, str, list[dict[str, Any]]]:
+    store = LegalVectorStore()
+    s = get_settings()
+    lim = body.limit if body.limit is not None else s.retrieval_top_k
+    did = body.doc_id.strip()
+    rq = body.retrieval_query.strip()
+    hits = store.search(rq, limit=lim, doc_id=did)
+    ctx = format_context_block(hits)
+    user = f"INSTRUCTION:\n{body.instruction.strip()}\n\nCONTEXT EXCERPTS:\n{ctx}"
+    return lim, did, user, _rag_sources_from_hits(hits)
+
+
+def _prepare_compare_documents_parts(
+    body: CompareDocumentsRequest,
+) -> tuple[str, str, str, list[dict[str, Any]], list[dict[str, Any]], int]:
+    store = LegalVectorStore()
+    s = get_settings()
+    da = body.doc_id_a.strip()
+    db = body.doc_id_b.strip()
+    if da == db:
+        raise HTTPException(status_code=400, detail="doc_id_a and doc_id_b must differ")
+    rq = body.retrieval_query.strip()
+    if body.limit_per_document is not None:
+        per = min(max(body.limit_per_document, 2), 64)
+    else:
+        per = max(2, min(32, s.retrieval_top_k // 2))
+    hits_a = store.search(rq, limit=per, doc_id=da)
+    hits_b = store.search(rq, limit=per, doc_id=db)
+    ctx_a = format_context_block(hits_a)
+    ctx_b = format_context_block(hits_b)
+    user = (
+        f"INSTRUCTION:\n{body.instruction.strip()}\n\n"
+        f"DOCUMENT A (doc_id={da}):\n{ctx_a}\n\n"
+        f"DOCUMENT B (doc_id={db}):\n{ctx_b}"
+    )
+    return da, db, user, _rag_sources_from_hits(hits_a), _rag_sources_from_hits(hits_b), per
+
+
 def _should_audit_path(method: str, path: str) -> bool:
     if method not in ("POST", "PUT", "PATCH", "DELETE"):
         return False
@@ -233,7 +275,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.13.0",
+    version="0.14.0",
 )
 
 _origins = _cors_origins()
@@ -531,6 +573,15 @@ def ollama_running_processes() -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
+@app.get("/v1/ollama/agent-stack")
+def ollama_agent_stack() -> dict[str, Any]:
+    """
+    One JSON blob for local agent orchestration: Ollama ``/api/version``, ``/api/tags``, ``/api/ps``,
+    embed ping, per-task model routing, and configuration warnings (never fails the whole response).
+    """
+    return gather_ollama_agent_stack()
+
+
 @app.post("/v1/ollama/generate")
 def ollama_generate_native(body: OllamaGenerateRequest) -> dict[str, Any]:
     """
@@ -699,6 +750,17 @@ def runtime_info() -> RuntimeOut:
         ollama_base_url=s.ollama_base_url,
         qdrant_url=s.qdrant_url,
         device=gather_device_profile(),
+    )
+
+
+@app.get("/v1/runtime/storage")
+def runtime_storage_detail() -> dict[str, Any]:
+    """Bounded walk of upload storage + manifest / runs DB sizes (device-local ops)."""
+    s = get_settings()
+    return gather_storage_inventory(
+        upload_storage_dir=s.upload_storage_dir,
+        runs_db_path=s.runs_db_path,
+        persist_uploads=s.persist_uploads,
     )
 
 
@@ -1053,46 +1115,39 @@ def rag_near_duplicate_chunks(body: NearDuplicateChunksRequest) -> dict[str, Any
 @app.post("/v1/rag/document-summary", response_model=DocumentSummaryResponse)
 def rag_document_summary(body: DocumentSummaryRequest) -> DocumentSummaryResponse:
     """Scoped retrieval + synthesis summary — uses ``synthesis`` model routing (Ollama when configured)."""
-    store = LegalVectorStore()
-    s = get_settings()
-    lim = body.limit if body.limit is not None else s.retrieval_top_k
-    did = body.doc_id.strip()
-    rq = body.retrieval_query.strip()
-    hits = store.search(rq, limit=lim, doc_id=did)
-    ctx = format_context_block(hits)
-    user = f"INSTRUCTION:\n{body.instruction.strip()}\n\nCONTEXT EXCERPTS:\n{ctx}"
+    lim, did, user, sources = _prepare_document_summary_parts(body)
     summary = chat_complete(SUMMARIZE_SYSTEM, user, temperature=0.08, task="synthesis")
     return DocumentSummaryResponse(
         doc_id=did,
         summary=summary,
-        sources=_rag_sources_from_hits(hits),
+        sources=sources,
         retrieval_top_k=lim,
     )
+
+
+@app.post("/v1/rag/document-summary/stream")
+def rag_document_summary_stream(body: DocumentSummaryRequest):
+    """SSE: sources event then token stream for synthesis-task summary (same retrieval as non-stream)."""
+
+    def event_gen():
+        try:
+            lim, did, user, sources = _prepare_document_summary_parts(body)
+            yield _sse_payload(
+                {"event": "sources", "doc_id": did, "sources": sources, "retrieval_top_k": lim}
+            )
+            for piece in chat_stream(SUMMARIZE_SYSTEM, user, temperature=0.08, task="synthesis"):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
 @app.post("/v1/rag/compare-documents", response_model=CompareDocumentsResponse)
 def rag_compare_documents(body: CompareDocumentsRequest) -> CompareDocumentsResponse:
     """Side-by-side retrieval from two indexed docs + specialist comparison (local Ollama / routed LLM)."""
-    store = LegalVectorStore()
-    s = get_settings()
-    da = body.doc_id_a.strip()
-    db = body.doc_id_b.strip()
-    if da == db:
-        raise HTTPException(status_code=400, detail="doc_id_a and doc_id_b must differ")
-    rq = body.retrieval_query.strip()
-    if body.limit_per_document is not None:
-        per = min(max(body.limit_per_document, 2), 64)
-    else:
-        per = max(2, min(32, s.retrieval_top_k // 2))
-    hits_a = store.search(rq, limit=per, doc_id=da)
-    hits_b = store.search(rq, limit=per, doc_id=db)
-    ctx_a = format_context_block(hits_a)
-    ctx_b = format_context_block(hits_b)
-    user = (
-        f"INSTRUCTION:\n{body.instruction.strip()}\n\n"
-        f"DOCUMENT A (doc_id={da}):\n{ctx_a}\n\n"
-        f"DOCUMENT B (doc_id={db}):\n{ctx_b}"
-    )
+    da, db, user, src_a, src_b, per = _prepare_compare_documents_parts(body)
     comparison = chat_complete(
         COMPARE_DOCUMENTS_SYSTEM,
         user,
@@ -1103,10 +1158,38 @@ def rag_compare_documents(body: CompareDocumentsRequest) -> CompareDocumentsResp
         doc_id_a=da,
         doc_id_b=db,
         comparison=comparison,
-        sources_a=_rag_sources_from_hits(hits_a),
-        sources_b=_rag_sources_from_hits(hits_b),
+        sources_a=src_a,
+        sources_b=src_b,
         retrieval_top_k_per_side=per,
     )
+
+
+@app.post("/v1/rag/compare-documents/stream")
+def rag_compare_documents_stream(body: CompareDocumentsRequest):
+    """SSE: sources for both docs then specialist comparison tokens."""
+
+    def event_gen():
+        try:
+            da, db, user, src_a, src_b, per = _prepare_compare_documents_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id_a": da,
+                    "doc_id_b": db,
+                    "sources_a": src_a,
+                    "sources_b": src_b,
+                    "retrieval_top_k_per_side": per,
+                }
+            )
+            for piece in chat_stream(
+                COMPARE_DOCUMENTS_SYSTEM, user, temperature=0.06, task="specialist"
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
 @app.post("/v1/analyze", response_model=AnalyzeResponse)

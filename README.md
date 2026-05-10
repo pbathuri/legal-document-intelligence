@@ -74,6 +74,7 @@ legal-api
    - `GET /v1/metrics` — in-process HTTP request totals + path buckets (UUID run ids normalized); resets on restart
    - `GET /v1/metrics/prometheus` — Prometheus text exposition for scraping
    - `GET /v1/ollama/host` — native daemon introspection: **`/api/version`** + **`/api/ps`** (running models on the machine)
+   - `GET /v1/ollama/agent-stack` — **single JSON** for local agents: Ollama **`/api/version`** + **`/api/tags`** + **`/api/ps`**, embed probe, per-task **`model_routing`**, and configuration **warnings** (partial failures are surfaced per-field, not 503)
    - `GET /v1/ollama/version` — lightweight **`GET /api/version`** from the Ollama daemon (single-purpose; also folded into preflight deep)
    - `GET /v1/ollama/ps` — native **`/api/ps`** JSON (models currently loaded in the daemon — complements **`GET /v1/ollama/host`**)
    - `POST /v1/ollama/embed-proxy` — raw **`POST /api/embed`** passthrough (full daemon JSON; defaults **`model`** to **`OLLAMA_EMBEDDING_MODEL`**)
@@ -82,6 +83,7 @@ legal-api
    - `POST /v1/embeddings/embed-texts` — batch vectors for up to **48** strings (same embedding backend as RAG; large payloads — use for pipelines/agents on-device)
    - `POST /v1/embeddings/similarity` — JSON `{ "text_a", "text_b" }` → cosine similarity + embedding dimension (same backend as RAG)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
+   - `GET /v1/runtime/storage` — bounded filesystem inventory: bytes + file counts under **`UPLOAD_STORAGE_DIR`**, **`manifest.jsonl`** size/line estimate, **`RUNS_DB_PATH`** file size (device-local maintenance)
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
@@ -94,7 +96,9 @@ legal-api
    - `POST /v1/documents/purge` — JSON `{ "doc_ids": ["...", "..."] }` batch-delete vectors (≤200 ids)
    - `POST /v1/rag/near-duplicate-chunks` — intra-**doc_id** chunk pairs above a cosine threshold (bounded chunk count; uses same embedding backend as RAG — OCR overlap / duplicate page QA)
    - `POST /v1/rag/document-summary` — retrieval scoped to one **`doc_id`** + **synthesis**-task memo (grounded summary via **`SUMMARIZE_SYSTEM`**; **`retrieval_query`** drives chunk selection)
+   - `POST /v1/rag/document-summary/stream` — **SSE** (`text/event-stream`): initial **`sources`** event + synthesis token stream + **`done`** (same retrieval path as non-stream)
    - `POST /v1/rag/compare-documents` — retrieval from **two** **`doc_id`** values + specialist comparison (**`COMPARE_DOCUMENTS_SYSTEM`**); optional **`limit_per_document`**
+   - `POST /v1/rag/compare-documents/stream` — **SSE**: **`sources`** for both sides + specialist comparison tokens + **`done`**
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
