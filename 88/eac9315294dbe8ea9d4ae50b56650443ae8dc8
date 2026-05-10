@@ -1,0 +1,23 @@
+README.md
+  s_c7571ff3b984be::t_2a7b15ab576ac0 63-65
+tests/test_api.py
+  s_c7571ff3b984be::t_8bb9c8c460f31f 40-43
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_1b80cff47bd77d 832
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "88eac9315294dbe8ea9d4ae50b56650443ae8dc8",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
