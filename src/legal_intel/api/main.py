@@ -116,6 +116,14 @@ from legal_intel.api.schemas import (
     RepresentationsBucketsResponse,
     DocumentLexicalJaccardRequest,
     DocumentLexicalJaccardResponse,
+    TaxWithholdingRequest,
+    TaxWithholdingResponse,
+    InsuranceRequirementsRequest,
+    InsuranceRequirementsResponse,
+    SanctionsExportComplianceRequest,
+    SanctionsExportComplianceResponse,
+    DocumentTokenDifferenceRequest,
+    DocumentTokenDifferenceResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -173,6 +181,9 @@ from legal_intel.prompts import (
     POST_CLOSING_COVENANTS_JSON_SYSTEM,
     EARN_OUT_MECHANICS_JSON_SYSTEM,
     REPRESENTATIONS_BUCKETS_JSON_SYSTEM,
+    TAX_WITHHOLDING_JSON_SYSTEM,
+    INSURANCE_REQUIREMENTS_JSON_SYSTEM,
+    SANCTIONS_EXPORT_COMPLIANCE_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -219,7 +230,11 @@ from legal_intel.runtime.ollama_deep import gather_ollama_host_snapshot
 from legal_intel.runtime.ollama_agent_stack import gather_ollama_agent_stack
 from legal_intel.runtime.agent_bootstrap import gather_agent_bootstrap_pack
 from legal_intel.runtime.import_probe import gather_optional_import_versions
-from legal_intel.runtime.lexical_overlap import document_lexical_jaccard
+from legal_intel.runtime.lexical_overlap import (
+    document_lexical_jaccard,
+    document_token_set_difference,
+)
+from legal_intel.runtime.process_memory import gather_process_memory_snapshot
 from legal_intel.runtime.platform_detail import gather_platform_detail
 from legal_intel.runtime.preflight import gather_preflight
 from legal_intel.runtime.storage_inventory import gather_storage_inventory
@@ -640,6 +655,36 @@ def _prepare_representations_buckets_parts(
     )
 
 
+def _prepare_tax_withholding_parts(
+    body: TaxWithholdingRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_insurance_requirements_parts(
+    body: InsuranceRequirementsRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_sanctions_export_compliance_parts(
+    body: SanctionsExportComplianceRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -721,7 +766,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.27.0",
+    version="0.28.0",
 )
 
 _origins = _cors_origins()
@@ -1319,6 +1364,45 @@ def embedding_document_lexical_jaccard(
     )
 
 
+@app.post(
+    "/v1/embeddings/document-token-difference",
+    response_model=DocumentTokenDifferenceResponse,
+)
+def embedding_document_token_difference(
+    body: DocumentTokenDifferenceRequest,
+) -> DocumentTokenDifferenceResponse:
+    """Sorted samples of tokens present in one indexed doc but not the other (lexical vocabulary delta)."""
+    da = body.doc_id_a.strip()
+    db = body.doc_id_b.strip()
+    if not da or not db:
+        raise HTTPException(status_code=400, detail="doc_id_a and doc_id_b are required")
+    try:
+        out = document_token_set_difference(
+            doc_id_a=da,
+            doc_id_b=db,
+            max_chunks_per_document=int(body.max_chunks_per_document),
+            max_tokens_per_side=int(body.max_tokens_per_side),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return DocumentTokenDifferenceResponse(
+        doc_id_a=da,
+        doc_id_b=db,
+        chunks_used_a=int(out["chunks_used_a"]),
+        chunks_used_b=int(out["chunks_used_b"]),
+        unique_tokens_a=int(out["unique_tokens_a"]),
+        unique_tokens_b=int(out["unique_tokens_b"]),
+        total_only_in_a=int(out["total_only_in_a"]),
+        total_only_in_b=int(out["total_only_in_b"]),
+        tokens_only_in_a=list(out["tokens_only_in_a"]),
+        tokens_only_in_b=list(out["tokens_only_in_b"]),
+        truncated_only_in_a=bool(out["truncated_only_in_a"]),
+        truncated_only_in_b=bool(out["truncated_only_in_b"]),
+    )
+
+
 @app.get("/v1/build")
 def build_metadata() -> dict[str, Any]:
     """Package / Python / optional git SHA (set ``LEGAL_INTEL_GIT_SHA`` in deploy)."""
@@ -1738,6 +1822,12 @@ def runtime_platform_detail() -> dict[str, Any]:
 def runtime_optional_imports() -> dict[str, Any]:
     """Best-effort versions for numpy/torch/ST/LangChain/Qdrant/PyMuPDF/etc. on this interpreter (no network)."""
     return gather_optional_import_versions()
+
+
+@app.get("/v1/runtime/process-memory")
+def runtime_process_memory() -> dict[str, Any]:
+    """RSS/VMS/thread snapshot for this API process (**psutil** when installed)."""
+    return gather_process_memory_snapshot()
 
 
 @app.get("/v1/runtime/agent-bootstrap")
@@ -3434,6 +3524,173 @@ def rag_representations_buckets_stream(body: RepresentationsBucketsRequest):
             )
             for piece in chat_stream(
                 REPRESENTATIONS_BUCKETS_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/tax-withholding", response_model=TaxWithholdingResponse)
+def rag_tax_withholding(body: TaxWithholdingRequest) -> TaxWithholdingResponse:
+    """Single-doc retrieval + JSON tax / withholding hooks (**tax_withholding_v1**)."""
+    did, user, sources, lim = _prepare_tax_withholding_parts(body)
+    raw = chat_complete_json(
+        TAX_WITHHOLDING_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        tax_register: dict[str, Any] = json.loads(raw)
+        if not isinstance(tax_register, dict):
+            tax_register = {"_value": tax_register}
+    except Exception:
+        tax_register = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return TaxWithholdingResponse(
+        doc_id=did,
+        tax_register=tax_register,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/tax-withholding/stream")
+def rag_tax_withholding_stream(body: TaxWithholdingRequest):
+    """SSE: sources + streaming tax/withholding JSON (**tax_withholding_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_tax_withholding_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                TAX_WITHHOLDING_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/insurance-requirements", response_model=InsuranceRequirementsResponse)
+def rag_insurance_requirements(body: InsuranceRequirementsRequest) -> InsuranceRequirementsResponse:
+    """Single-doc retrieval + JSON insurance covenant signals (**insurance_requirements_v1**)."""
+    did, user, sources, lim = _prepare_insurance_requirements_parts(body)
+    raw = chat_complete_json(
+        INSURANCE_REQUIREMENTS_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        insurance_register: dict[str, Any] = json.loads(raw)
+        if not isinstance(insurance_register, dict):
+            insurance_register = {"_value": insurance_register}
+    except Exception:
+        insurance_register = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return InsuranceRequirementsResponse(
+        doc_id=did,
+        insurance_register=insurance_register,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/insurance-requirements/stream")
+def rag_insurance_requirements_stream(body: InsuranceRequirementsRequest):
+    """SSE: sources + streaming insurance JSON (**insurance_requirements_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_insurance_requirements_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                INSURANCE_REQUIREMENTS_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/sanctions-export-compliance", response_model=SanctionsExportComplianceResponse)
+def rag_sanctions_export_compliance(
+    body: SanctionsExportComplianceRequest,
+) -> SanctionsExportComplianceResponse:
+    """Single-doc retrieval + JSON sanctions / export / ABC hooks (**sanctions_export_compliance_v1**)."""
+    did, user, sources, lim = _prepare_sanctions_export_compliance_parts(body)
+    raw = chat_complete_json(
+        SANCTIONS_EXPORT_COMPLIANCE_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        compliance_register: dict[str, Any] = json.loads(raw)
+        if not isinstance(compliance_register, dict):
+            compliance_register = {"_value": compliance_register}
+    except Exception:
+        compliance_register = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return SanctionsExportComplianceResponse(
+        doc_id=did,
+        compliance_register=compliance_register,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/sanctions-export-compliance/stream")
+def rag_sanctions_export_compliance_stream(body: SanctionsExportComplianceRequest):
+    """SSE: sources + streaming sanctions/export compliance JSON (**sanctions_export_compliance_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_sanctions_export_compliance_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                SANCTIONS_EXPORT_COMPLIANCE_JSON_SYSTEM,
                 user,
                 temperature=0.0,
                 max_tokens=8192,

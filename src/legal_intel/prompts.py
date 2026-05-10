@@ -434,6 +434,54 @@ Respond with ONE JSON object:
 }
 Rules: `qualifier_hints` only when language supports it; empty array otherwise."""
 
+TAX_WITHHOLDING_JSON_SYSTEM = """[tax_withholding_v1]
+You extract **tax, withholding, and purchase-price allocation hooks** stated ONLY in CONTEXT ([n]): FIRPTA, treaty positions, gross-up, withholding certificates, 338(h)(10), Section 754, transfer taxes, VAT/GST references when visible.
+Respond with ONE JSON object:
+{
+  "items": [
+    {
+      "summary": "<short>",
+      "topic": "withholding_certificate" | "firpta" | "treaty" | "gross_up" | "purchase_price_allocation" | "transfer_tax" | "passthrough_tax" | "other",
+      "party_hint": "<Buyer/Seller/Target/Shared/Unknown>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<never invent treaty articles or rates not in excerpts>"
+}
+Rules: Omit fabricated IRC section numbers — quote-style references only if visible in CONTEXT."""
+
+INSURANCE_REQUIREMENTS_JSON_SYSTEM = """[insurance_requirements_v1]
+You extract **insurance** signals stated ONLY in CONTEXT ([n]): R&W buy-side, D&O tail, occurrence vs claims-made, minimum limits, additional insured, certificates, notice to carriers.
+Respond with ONE JSON object:
+{
+  "requirements": [
+    {
+      "summary": "<short>",
+      "insurance_line": "rw_representation_warranty" | "general_liability" | "workers_comp" | "cyber" | "property" | "umbrella" | "directors_officers" | "tail_coverage" | "other",
+      "limit_or_deductible_text": "<verbatim-ish from excerpts or null>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<policy numbers not in excerpts>"
+}
+Rules: Do not invent dollar limits — only when excerpts include figures or clear qualitative caps."""
+
+SANCTIONS_EXPORT_COMPLIANCE_JSON_SYSTEM = """[sanctions_export_compliance_v1]
+You extract **sanctions, export control, anti-bribery / corruption, and ABC program** hooks stated ONLY in CONTEXT ([n]): OFAC, denied parties, FCPA-style cooperation, gifts/entertainment, facilitation payments where mentioned.
+Respond with ONE JSON object:
+{
+  "hooks": [
+    {
+      "summary": "<short>",
+      "category": "sanctions_ofac" | "export_control" | "anti_corruption" | "anti_bribery_policy" | "modern_slavery" | "data_privacy_cross_border" | "other",
+      "scope_hint": "<Seller/Target/Buyer/Shared/Unknown>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<jurisdictional coverage not visible in excerpts>"
+}
+Rules: Never claim specific export classifications (ITAR/EAR) unless excerpts name them."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

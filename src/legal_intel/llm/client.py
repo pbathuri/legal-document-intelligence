@@ -523,6 +523,51 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "tax_withholding_v1" in system:
+            return json.dumps(
+                {
+                    "items": [
+                        {
+                            "summary": "[MOCK] Illustrative withholding cooperation covenant.",
+                            "topic": "withholding_certificate",
+                            "party_hint": "Unknown",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real tax hooks.",
+                    "_mock": True,
+                }
+            )
+        if "insurance_requirements_v1" in system:
+            return json.dumps(
+                {
+                    "requirements": [
+                        {
+                            "summary": "[MOCK] Maintain D&O tail coverage.",
+                            "insurance_line": "directors_officers",
+                            "limit_or_deductible_text": None,
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real insurance terms.",
+                    "_mock": True,
+                }
+            )
+        if "sanctions_export_compliance_v1" in system:
+            return json.dumps(
+                {
+                    "hooks": [
+                        {
+                            "summary": "[MOCK] Compliance with applicable sanctions lists.",
+                            "category": "sanctions_ofac",
+                            "scope_hint": "Unknown",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real compliance hooks.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

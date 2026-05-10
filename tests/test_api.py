@@ -2347,3 +2347,89 @@ def test_representations_buckets(api_client):
     )
     assert r.status_code == 200
     assert r.json()["reps_buckets"]
+
+
+def test_runtime_process_memory(api_client):
+    r = api_client.get("/v1/runtime/process-memory")
+    assert r.status_code == 200
+    j = r.json()
+    assert "pid" in j
+
+
+def test_document_token_difference(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="td_a",
+        doc_label="a.pdf",
+        chunks=[("Arbitration shall be seated in Delaware.", {"page_start": 1, "page_end": 1})],
+    )
+    store.upsert_document_chunks(
+        doc_id="td_b",
+        doc_label="b.pdf",
+        chunks=[("Forum selection specifies California courts exclusively.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/embeddings/document-token-difference",
+        json={
+            "doc_id_a": "td_a",
+            "doc_id_b": "td_b",
+            "max_chunks_per_document": 16,
+            "max_tokens_per_side": 200,
+        },
+    )
+    assert r.status_code == 200
+    j = r.json()
+    assert j["total_only_in_a"] >= 1 or j["total_only_in_b"] >= 1
+
+
+def test_tax_withholding(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="tw1",
+        doc_label="spa.pdf",
+        chunks=[("Buyer shall cooperate with reasonable efforts to obtain FIRPTA withholding certificates prior to Closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/tax-withholding",
+        json={"doc_id": "tw1", "retrieval_query": "FIRPTA withholding"},
+    )
+    assert r.status_code == 200
+    assert r.json()["tax_register"]
+
+
+def test_insurance_requirements(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="ins1",
+        doc_label="spa.pdf",
+        chunks=[("Seller shall maintain directors and officers liability insurance through the tail period.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/insurance-requirements",
+        json={"doc_id": "ins1", "retrieval_query": "D&O tail insurance"},
+    )
+    assert r.status_code == 200
+    assert r.json()["insurance_register"]
+
+
+def test_sanctions_export_compliance(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="se1",
+        doc_label="spa.pdf",
+        chunks=[("Each party represents compliance with applicable anti-corruption laws including the U.S. Foreign Corrupt Practices Act.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/sanctions-export-compliance",
+        json={"doc_id": "se1", "retrieval_query": "anti-corruption FCPA"},
+    )
+    assert r.status_code == 200
+    assert r.json()["compliance_register"]

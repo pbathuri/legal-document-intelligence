@@ -91,6 +91,7 @@ legal-api
    - `POST /v1/embeddings/document-centroid-similarity` — JSON `{ "doc_id_a", "doc_id_b", "max_chunks_per_document" }` → cosine between **mean embeddings** of chunk texts per document (bounded Qdrant scroll — topical similarity / clustering signal without LLM)
    - `POST /v1/embeddings/document-chunk-stats` — JSON `{ "doc_id", "max_chunks_scanned" }` → **chunk length statistics** from Qdrant (non-empty vs empty chunks, mean/max/min chars; **`truncated_scan`** if more chunks exist — OCR / segmentation QA; **no LLM**)
    - `POST /v1/embeddings/document-lexical-jaccard` — JSON `{ "doc_id_a", "doc_id_b", "max_chunks_per_document" }` → **token Jaccard** overlap on chunked text (stopwords trimmed — cheap lexical complement to semantic centroid similarity; **no LLM**)
+   - `POST /v1/embeddings/document-token-difference` — JSON `{ "doc_id_a", "doc_id_b", "max_chunks_per_document", "max_tokens_per_side" }` → **sorted token vocabulary deltas** (tokens only in A vs only in B; truncation flags — **no LLM**)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/runtime/storage` — bounded filesystem inventory: bytes + file counts under **`UPLOAD_STORAGE_DIR`**, **`manifest.jsonl`** size/line estimate, **`RUNS_DB_PATH`** file size (device-local maintenance)
    - `GET /v1/runtime/git` — best-effort **Git** snapshot for the API **`cwd`** (`commit`, `branch`, `dirty` when **`git`** is on **PATH**)
@@ -102,6 +103,7 @@ legal-api
    - `GET /v1/runtime/path-entries` — non-empty segments from the process **`PATH`** env var (`limit` query param, default 80; max 200) — toolchain / shell debugging on the API host
    - `GET /v1/runtime/platform-detail` — stdlib **`platform`** snapshot (**uname**, libc version when available, Python build tags) for diagnosing native wheels / ROCm / toolchain on the API host
    - `GET /v1/runtime/optional-imports` — best-effort **`__version__`** probes for **numpy**, **torch**, **sentence-transformers**, **LangChain/LangGraph**, **Qdrant**, **PyMuPDF (`fitz`)**, **sklearn**, **psutil**, **openai** on the active interpreter (offline — agents size workloads / debug imports)
+   - `GET /v1/runtime/process-memory` — this API process **RSS/VMS**, thread count, optional **`resource.getrusage` maxrss**, **`psutil`** when installed (local sizing / leak sniffing)
    - `GET /v1/runtime/agent-bootstrap` — **single JSON** for on-device agents: resolved **Ollama / OpenAI-compatible** model routing (**extraction** / **synthesis** / **specialist**), **`gather_preflight()`**, **`platform_detail`**, **`device`**, and route hints (no secrets — aligns local agents with this API before RAG calls)
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
@@ -165,6 +167,12 @@ legal-api
    - `POST /v1/rag/earn-out-mechanics/stream` — **SSE**: **`sources`** + streaming JSON (**extraction** routing)
    - `POST /v1/rag/representations-buckets` — retrieval + JSON **representations & warranties thematic buckets + qualifiers** (**`reps_buckets_v1`**)
    - `POST /v1/rag/representations-buckets/stream` — **SSE**: **`sources`** + streaming JSON (**extraction** routing)
+   - `POST /v1/rag/tax-withholding` — retrieval + JSON **tax / withholding / FIRPTA / gross-up** hooks (**`tax_withholding_v1`**)
+   - `POST /v1/rag/tax-withholding/stream` — **SSE**: **`sources`** + streaming JSON (**extraction** routing)
+   - `POST /v1/rag/insurance-requirements` — retrieval + JSON **insurance / R&W / D&O tail** signals (**`insurance_requirements_v1`**)
+   - `POST /v1/rag/insurance-requirements/stream` — **SSE**: **`sources`** + streaming JSON (**extraction** routing)
+   - `POST /v1/rag/sanctions-export-compliance` — retrieval + JSON **sanctions / export / anti-corruption** hooks (**`sanctions_export_compliance_v1`**)
+   - `POST /v1/rag/sanctions-export-compliance/stream` — **SSE**: **`sources`** + streaming JSON (**extraction** routing)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`

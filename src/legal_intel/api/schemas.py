@@ -1006,3 +1006,84 @@ class DocumentLexicalJaccardResponse(BaseModel):
     intersection_token_count: int
     union_token_count: int
     jaccard_similarity: float
+
+
+class TaxWithholdingRequest(BaseModel):
+    """Single-doc retrieval + JSON tax / withholding hooks (``tax_withholding_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="withholding FIRPTA treaty gross-up certificate Section 338 754 transfer tax stamp duty VAT GST purchase price allocation stepped-up basis installment sale backup withholding foreign tax credits passthrough",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class TaxWithholdingResponse(BaseModel):
+    doc_id: str
+    tax_register: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class InsuranceRequirementsRequest(BaseModel):
+    """Single-doc retrieval + JSON insurance covenant signals (``insurance_requirements_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="insurance representation warranty R&W buy-side D&O tail occurrence claims-made certificate additional insured umbrella cyber workers compensation general liability policy endorsement notice carrier limits deductible retroactive date",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class InsuranceRequirementsResponse(BaseModel):
+    doc_id: str
+    insurance_register: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class SanctionsExportComplianceRequest(BaseModel):
+    """Single-doc retrieval + JSON sanctions / export / ABC hooks (``sanctions_export_compliance_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="OFAC sanctions denied party export control ITAR EAR anti-bribery FCPA facilitation payment gifts entertainment compliance policy ABC modern slavery human trafficking export import embargo restricted party",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class SanctionsExportComplianceResponse(BaseModel):
+    doc_id: str
+    compliance_register: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class DocumentTokenDifferenceRequest(BaseModel):
+    """Sorted token-set difference samples for two indexed documents (lexical delta — no embeddings)."""
+
+    doc_id_a: str = Field(..., min_length=1)
+    doc_id_b: str = Field(..., min_length=1)
+    max_chunks_per_document: int = Field(64, ge=4, le=256)
+    max_tokens_per_side: int = Field(400, ge=10, le=5000)
+
+
+class DocumentTokenDifferenceResponse(BaseModel):
+    doc_id_a: str
+    doc_id_b: str
+    chunks_used_a: int
+    chunks_used_b: int
+    unique_tokens_a: int
+    unique_tokens_b: int
+    total_only_in_a: int
+    total_only_in_b: int
+    tokens_only_in_a: list[str]
+    tokens_only_in_b: list[str]
+    truncated_only_in_a: bool
+    truncated_only_in_b: bool

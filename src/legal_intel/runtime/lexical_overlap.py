@@ -63,3 +63,40 @@ def document_lexical_jaccard(
         "union_token_count": ju,
         "jaccard_similarity": round(jac, 8),
     }
+
+
+def document_token_set_difference(
+    *,
+    doc_id_a: str,
+    doc_id_b: str,
+    max_chunks_per_document: int = 64,
+    max_tokens_per_side: int = 400,
+) -> dict[str, Any]:
+    """Symmetric difference of token sets (sorted samples) — vocabulary delta without embeddings."""
+    da = (doc_id_a or "").strip()
+    db = (doc_id_b or "").strip()
+    if not da or not db:
+        raise ValueError("Both doc_ids must be non-empty")
+    cap = max(4, min(max_chunks_per_document, 256))
+    side_cap = max(10, min(max_tokens_per_side, 5000))
+    store = LegalVectorStore()
+    texts_a = store.list_chunk_texts(da, max_chunks=cap)
+    texts_b = store.list_chunk_texts(db, max_chunks=cap)
+    if not texts_a or not texts_b:
+        raise ValueError("Both documents must have indexed chunks")
+    sa = _token_set(texts_a)
+    sb = _token_set(texts_b)
+    only_a = sorted(sa - sb)
+    only_b = sorted(sb - sa)
+    return {
+        "chunks_used_a": len(texts_a),
+        "chunks_used_b": len(texts_b),
+        "unique_tokens_a": len(sa),
+        "unique_tokens_b": len(sb),
+        "total_only_in_a": len(only_a),
+        "total_only_in_b": len(only_b),
+        "tokens_only_in_a": only_a[:side_cap],
+        "tokens_only_in_b": only_b[:side_cap],
+        "truncated_only_in_a": len(only_a) > side_cap,
+        "truncated_only_in_b": len(only_b) > side_cap,
+    }
