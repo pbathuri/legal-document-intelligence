@@ -829,6 +829,7 @@ async def request_id_middleware(request: Request, call_next):
 
 
 @app.get("/health", response_model=HealthResponse)
+@app.get("/v1/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     s = get_settings()
     o_models: list[str] | None = None

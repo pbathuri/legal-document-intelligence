@@ -37,6 +37,10 @@ def test_health(api_client):
     assert body["embedding_provider"] == "sentence_transformers"
     assert "models" in body
 
+    r_v1 = api_client.get("/v1/health")
+    assert r_v1.status_code == 200
+    assert r_v1.json() == body
+
 
 def test_analyze_india_requires_doc_ids(api_client):
     r = api_client.post(

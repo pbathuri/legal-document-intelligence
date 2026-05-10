@@ -60,6 +60,9 @@ The interactive dashboard at repo root (`index.html`) is designed for **static h
 pip install -e ".[dev]"
 export LEGAL_INTEL_MOCK_LLM=1          # or 0 + configure LLM below
 export QDRANT_URL=:memory:             # or http://localhost:6333 with docker compose up -d
+# CPU / CI-friendly embeddings (matches tests/conftest.py). Omit these only if you use Ollama embeddings.
+export EMBEDDING_PROVIDER=sentence_transformers
+export EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 legal-api
 # → http://127.0.0.1:8080  (override with LEGAL_INTEL_API_PORT)
 ```
