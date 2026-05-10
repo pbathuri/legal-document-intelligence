@@ -476,6 +476,53 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "post_closing_covenants_v1" in system:
+            return json.dumps(
+                {
+                    "rows": [
+                        {
+                            "summary": "[MOCK] Provide transition IT support for ninety days.",
+                            "obligation_type": "systems_it",
+                            "duration_or_survival_hint": "[MOCK] ninety days",
+                            "party_hint": "Unknown",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real post-closing terms.",
+                    "_mock": True,
+                }
+            )
+        if "earn_out_mechanics_v1" in system:
+            return json.dumps(
+                {
+                    "mechanics": [
+                        {
+                            "summary": "[MOCK] Earn-out measured on adjusted EBITDA.",
+                            "metric_family": "ebitda",
+                            "measurement_window_text": "[MOCK] two fiscal years",
+                            "dispute_or_accounting_hook": None,
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real earn-out mechanics.",
+                    "_mock": True,
+                }
+            )
+        if "reps_buckets_v1" in system:
+            return json.dumps(
+                {
+                    "buckets": [
+                        {
+                            "bucket": "organization_authority",
+                            "summary": "[MOCK] Organization and authority representation.",
+                            "qualifier_hints": ["knowledge_qualified"],
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real rep buckets.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

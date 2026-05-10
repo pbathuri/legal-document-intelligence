@@ -384,6 +384,56 @@ Respond with ONE JSON object:
 }
 Rules: Never invent registration numbers not shown in CONTEXT."""
 
+POST_CLOSING_COVENANTS_JSON_SYSTEM = """[post_closing_covenants_v1]
+You extract **post-closing obligations and transition mechanics** stated ONLY in CONTEXT ([n]): transition services agreements (TSA), integration support, payroll/benefits bridging, IT separation, accounting assistance, employee retention windows, earn-out cooperation covenants when framed as ongoing duties.
+Respond with ONE JSON object:
+{
+  "rows": [
+    {
+      "summary": "<short imperative>",
+      "obligation_type": "transition_services" | "integration_support" | "business_continuity" | "employee_matters" | "systems_it" | "financial_reporting_bridge" | "earn_out_cooperation" | "other",
+      "duration_or_survival_hint": "<months/years/on-call/until event — or null>",
+      "party_hint": "<Buyer/Seller/Target/Shared/Unknown>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<coverage gaps>"
+}
+Rules: Merge duplicates; evidence_refs required when CONTEXT supports the row."""
+
+EARN_OUT_MECHANICS_JSON_SYSTEM = """[earn_out_mechanics_v1]
+You extract **earn-out, milestone, or contingent consideration mechanics** stated ONLY in CONTEXT ([n]): metrics, measurement periods, dispute resolution, true-ups, accounting principles hooks, offsets.
+Respond with ONE JSON object:
+{
+  "mechanics": [
+    {
+      "summary": "<short>",
+      "metric_family": "revenue" | "ebitda" | "gross_profit" | "customer_retention" | "multi_metric" | "non_financial" | "other",
+      "measurement_window_text": "<verbatim-ish window from excerpts or null>",
+      "dispute_or_accounting_hook": "<GAAP / auditor / expert — or null>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<numeric gaps — never invent KPI thresholds>"
+}
+Rules: Omit rows when excerpts lack substantive mechanics; never fabricate percentages."""
+
+REPRESENTATIONS_BUCKETS_JSON_SYSTEM = """[reps_buckets_v1]
+You organize **representations & warranties** signals stated ONLY in CONTEXT ([n]) into thematic buckets and qualifiers (fundamental vs general when hinted).
+Respond with ONE JSON object:
+{
+  "buckets": [
+    {
+      "bucket": "organization_authority" | "capitalization" | "financial_statements" | "tax" | "litigation" | "compliance" | "intellectual_property" | "employees_benefits" | "environmental" | "material_contracts" | "title_assets" | "other",
+      "summary": "<what excerpt suggests>",
+      "qualifier_hints": ["knowledge_qualified", "materiality_scrape", "fundamental_tone", "bring_down"],
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<schedule-level detail not in excerpts>"
+}
+Rules: `qualifier_hints` only when language supports it; empty array otherwise."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

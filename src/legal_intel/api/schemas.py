@@ -929,3 +929,80 @@ class DocumentChunkStatsResponse(BaseModel):
     max_chars_nonempty: int | None = None
     doc_label: str | None = None
     truncated_scan: bool
+
+
+class PostClosingCovenantsRequest(BaseModel):
+    """Single-doc retrieval + JSON post-closing / transition obligations (``post_closing_covenants_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="transition services TSA integration payroll benefits separation IT systems carve-out cooperation earn-out cooperation post-closing covenant ongoing employment retention accounting assistance financial statements bridge bring-down assistance cooperation reasonable assistance",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class PostClosingCovenantsResponse(BaseModel):
+    doc_id: str
+    post_closing: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class EarnOutMechanicsRequest(BaseModel):
+    """Single-doc retrieval + JSON earn-out / contingent consideration mechanics (``earn_out_mechanics_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="earn-out earn out contingent consideration milestone KPI EBITDA revenue gross profit measurement period true-up dispute accountant expert GAAP working capital adjustment offset purchase price adjustment calculation statement objection certificate",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class EarnOutMechanicsResponse(BaseModel):
+    doc_id: str
+    earn_out: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class RepresentationsBucketsRequest(BaseModel):
+    """Single-doc retrieval + JSON R&W thematic buckets (``reps_buckets_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="representations warranties fundamental knowledge material adverse disclosed schedules disclosure schedules bring-down schedules capitalization taxes litigation environmental intellectual property employees benefits title assets material contracts compliance organization authority subsidiaries",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class RepresentationsBucketsResponse(BaseModel):
+    doc_id: str
+    reps_buckets: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class DocumentLexicalJaccardRequest(BaseModel):
+    """Token Jaccard overlap across two indexed documents (no embeddings — lexical complement to centroid similarity)."""
+
+    doc_id_a: str = Field(..., min_length=1)
+    doc_id_b: str = Field(..., min_length=1)
+    max_chunks_per_document: int = Field(64, ge=4, le=256)
+
+
+class DocumentLexicalJaccardResponse(BaseModel):
+    doc_id_a: str
+    doc_id_b: str
+    chunks_used_a: int
+    chunks_used_b: int
+    unique_tokens_a: int
+    unique_tokens_b: int
+    intersection_token_count: int
+    union_token_count: int
+    jaccard_similarity: float

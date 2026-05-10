@@ -22,6 +22,9 @@ def gather_agent_bootstrap_pack(*, api_version: str) -> dict[str, Any]:
             "/v1/rag/survival-schedule",
             "/v1/rag/assignment-coc",
             "/v1/rag/ip-assets-sweep",
+            "/v1/rag/post-closing-covenants",
+            "/v1/rag/earn-out-mechanics",
+            "/v1/rag/representations-buckets",
             "/v1/rag/conditions-precedent",
             "/v1/rag/execution-formalities",
             "/v1/rag/issue-spotter",
@@ -34,6 +37,7 @@ def gather_agent_bootstrap_pack(*, api_version: str) -> dict[str, Any]:
             "/v1/embeddings/farthest-pair",
             "/v1/embeddings/document-centroid-similarity",
             "/v1/embeddings/document-chunk-stats",
+            "/v1/embeddings/document-lexical-jaccard",
         ],
     }
     return {
@@ -58,5 +62,6 @@ def gather_agent_bootstrap_pack(*, api_version: str) -> dict[str, Any]:
         "preflight": gather_preflight(),
         "platform_detail": gather_platform_detail(),
         "device": gather_device_profile(),
+        "optional_imports_probe": "GET /v1/runtime/optional-imports",
         "route_hints": routes_hint,
     }

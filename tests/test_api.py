@@ -2260,3 +2260,90 @@ def test_document_chunk_stats(api_client):
     assert j["nonempty_chunk_count"] == 2
     assert j["total_characters_nonempty"] > 10
     assert j["truncated_scan"] is False
+
+
+def test_runtime_optional_imports(api_client):
+    r = api_client.get("/v1/runtime/optional-imports")
+    assert r.status_code == 200
+    j = r.json()
+    assert "modules" in j
+    assert "qdrant_client" in j["modules"]
+
+
+def test_document_lexical_jaccard(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="lj_a",
+        doc_label="a.pdf",
+        chunks=[
+            ("Indemnification covenant survives eighteen months post-closing.", {"page_start": 1, "page_end": 1}),
+        ],
+    )
+    store.upsert_document_chunks(
+        doc_id="lj_b",
+        doc_label="b.pdf",
+        chunks=[
+            ("Indemnification obligations survive for eighteen months following the Closing.", {"page_start": 1, "page_end": 1}),
+        ],
+    )
+    r = api_client.post(
+        "/v1/embeddings/document-lexical-jaccard",
+        json={"doc_id_a": "lj_a", "doc_id_b": "lj_b", "max_chunks_per_document": 16},
+    )
+    assert r.status_code == 200
+    j = r.json()
+    assert 0.0 <= j["jaccard_similarity"] <= 1.0
+    assert j["union_token_count"] >= 1
+
+
+def test_post_closing_covenants(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="pc1",
+        doc_label="tsa.pdf",
+        chunks=[("Seller shall provide reasonable transition assistance for sixty days following Closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/post-closing-covenants",
+        json={"doc_id": "pc1", "retrieval_query": "transition assistance closing"},
+    )
+    assert r.status_code == 200
+    assert r.json()["post_closing"]
+
+
+def test_earn_out_mechanics(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="eo1",
+        doc_label="spa.pdf",
+        chunks=[("The Earn-Out Payment shall be calculated based on Adjusted EBITDA for the two fiscal years post-Closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/earn-out-mechanics",
+        json={"doc_id": "eo1", "retrieval_query": "earn-out EBITDA fiscal"},
+    )
+    assert r.status_code == 200
+    assert r.json()["earn_out"]
+
+
+def test_representations_buckets(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="rb1",
+        doc_label="spa.pdf",
+        chunks=[("Seller represents that, to Seller's Knowledge, there is no pending litigation material to the Business.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/representations-buckets",
+        json={"doc_id": "rb1", "retrieval_query": "knowledge litigation material"},
+    )
+    assert r.status_code == 200
+    assert r.json()["reps_buckets"]

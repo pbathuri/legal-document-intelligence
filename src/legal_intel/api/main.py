@@ -108,6 +108,14 @@ from legal_intel.api.schemas import (
     IpAssetsSweepResponse,
     DocumentChunkStatsRequest,
     DocumentChunkStatsResponse,
+    PostClosingCovenantsRequest,
+    PostClosingCovenantsResponse,
+    EarnOutMechanicsRequest,
+    EarnOutMechanicsResponse,
+    RepresentationsBucketsRequest,
+    RepresentationsBucketsResponse,
+    DocumentLexicalJaccardRequest,
+    DocumentLexicalJaccardResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -162,6 +170,9 @@ from legal_intel.prompts import (
     SURVIVAL_SCHEDULE_JSON_SYSTEM,
     ASSIGNMENT_COC_JSON_SYSTEM,
     IP_ASSETS_SWEEP_JSON_SYSTEM,
+    POST_CLOSING_COVENANTS_JSON_SYSTEM,
+    EARN_OUT_MECHANICS_JSON_SYSTEM,
+    REPRESENTATIONS_BUCKETS_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -207,6 +218,8 @@ from legal_intel.runtime.ollama_warnings import build_ollama_model_warnings
 from legal_intel.runtime.ollama_deep import gather_ollama_host_snapshot
 from legal_intel.runtime.ollama_agent_stack import gather_ollama_agent_stack
 from legal_intel.runtime.agent_bootstrap import gather_agent_bootstrap_pack
+from legal_intel.runtime.import_probe import gather_optional_import_versions
+from legal_intel.runtime.lexical_overlap import document_lexical_jaccard
 from legal_intel.runtime.platform_detail import gather_platform_detail
 from legal_intel.runtime.preflight import gather_preflight
 from legal_intel.runtime.storage_inventory import gather_storage_inventory
@@ -597,6 +610,36 @@ def _prepare_ip_assets_sweep_parts(
     )
 
 
+def _prepare_post_closing_covenants_parts(
+    body: PostClosingCovenantsRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_earn_out_mechanics_parts(
+    body: EarnOutMechanicsRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_representations_buckets_parts(
+    body: RepresentationsBucketsRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -678,7 +721,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.26.0",
+    version="0.27.0",
 )
 
 _origins = _cors_origins()
@@ -1241,6 +1284,41 @@ def embedding_document_chunk_stats(body: DocumentChunkStatsRequest) -> DocumentC
     )
 
 
+@app.post(
+    "/v1/embeddings/document-lexical-jaccard",
+    response_model=DocumentLexicalJaccardResponse,
+)
+def embedding_document_lexical_jaccard(
+    body: DocumentLexicalJaccardRequest,
+) -> DocumentLexicalJaccardResponse:
+    """Token-set **Jaccard** overlap between two indexed docs (stopword-stripped — complements centroid cosine)."""
+    da = body.doc_id_a.strip()
+    db = body.doc_id_b.strip()
+    if not da or not db:
+        raise HTTPException(status_code=400, detail="doc_id_a and doc_id_b are required")
+    try:
+        out = document_lexical_jaccard(
+            doc_id_a=da,
+            doc_id_b=db,
+            max_chunks_per_document=int(body.max_chunks_per_document),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return DocumentLexicalJaccardResponse(
+        doc_id_a=da,
+        doc_id_b=db,
+        chunks_used_a=int(out["chunks_used_a"]),
+        chunks_used_b=int(out["chunks_used_b"]),
+        unique_tokens_a=int(out["unique_tokens_a"]),
+        unique_tokens_b=int(out["unique_tokens_b"]),
+        intersection_token_count=int(out["intersection_token_count"]),
+        union_token_count=int(out["union_token_count"]),
+        jaccard_similarity=float(out["jaccard_similarity"]),
+    )
+
+
 @app.get("/v1/build")
 def build_metadata() -> dict[str, Any]:
     """Package / Python / optional git SHA (set ``LEGAL_INTEL_GIT_SHA`` in deploy)."""
@@ -1654,6 +1732,12 @@ def runtime_path_env_entries(limit: int = 80) -> dict[str, Any]:
 def runtime_platform_detail() -> dict[str, Any]:
     """Stdlib **platform** introspection: OS release, machine, Python build, **uname** / **libc** when available."""
     return gather_platform_detail()
+
+
+@app.get("/v1/runtime/optional-imports")
+def runtime_optional_imports() -> dict[str, Any]:
+    """Best-effort versions for numpy/torch/ST/LangChain/Qdrant/PyMuPDF/etc. on this interpreter (no network)."""
+    return gather_optional_import_versions()
 
 
 @app.get("/v1/runtime/agent-bootstrap")
@@ -3185,6 +3269,171 @@ def rag_ip_assets_sweep_stream(body: IpAssetsSweepRequest):
             )
             for piece in chat_stream(
                 IP_ASSETS_SWEEP_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/post-closing-covenants", response_model=PostClosingCovenantsResponse)
+def rag_post_closing_covenants(body: PostClosingCovenantsRequest) -> PostClosingCovenantsResponse:
+    """Single-doc retrieval + JSON post-closing / transition obligations (**post_closing_covenants_v1**)."""
+    did, user, sources, lim = _prepare_post_closing_covenants_parts(body)
+    raw = chat_complete_json(
+        POST_CLOSING_COVENANTS_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        post_closing: dict[str, Any] = json.loads(raw)
+        if not isinstance(post_closing, dict):
+            post_closing = {"_value": post_closing}
+    except Exception:
+        post_closing = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return PostClosingCovenantsResponse(
+        doc_id=did,
+        post_closing=post_closing,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/post-closing-covenants/stream")
+def rag_post_closing_covenants_stream(body: PostClosingCovenantsRequest):
+    """SSE: sources + streaming post-closing JSON (**post_closing_covenants_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_post_closing_covenants_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                POST_CLOSING_COVENANTS_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/earn-out-mechanics", response_model=EarnOutMechanicsResponse)
+def rag_earn_out_mechanics(body: EarnOutMechanicsRequest) -> EarnOutMechanicsResponse:
+    """Single-doc retrieval + JSON earn-out / milestone mechanics (**earn_out_mechanics_v1**)."""
+    did, user, sources, lim = _prepare_earn_out_mechanics_parts(body)
+    raw = chat_complete_json(
+        EARN_OUT_MECHANICS_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        earn_out: dict[str, Any] = json.loads(raw)
+        if not isinstance(earn_out, dict):
+            earn_out = {"_value": earn_out}
+    except Exception:
+        earn_out = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return EarnOutMechanicsResponse(
+        doc_id=did,
+        earn_out=earn_out,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/earn-out-mechanics/stream")
+def rag_earn_out_mechanics_stream(body: EarnOutMechanicsRequest):
+    """SSE: sources + streaming earn-out mechanics JSON (**earn_out_mechanics_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_earn_out_mechanics_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                EARN_OUT_MECHANICS_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/representations-buckets", response_model=RepresentationsBucketsResponse)
+def rag_representations_buckets(body: RepresentationsBucketsRequest) -> RepresentationsBucketsResponse:
+    """Single-doc retrieval + JSON R&W thematic buckets (**reps_buckets_v1**)."""
+    did, user, sources, lim = _prepare_representations_buckets_parts(body)
+    raw = chat_complete_json(
+        REPRESENTATIONS_BUCKETS_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        reps_buckets: dict[str, Any] = json.loads(raw)
+        if not isinstance(reps_buckets, dict):
+            reps_buckets = {"_value": reps_buckets}
+    except Exception:
+        reps_buckets = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return RepresentationsBucketsResponse(
+        doc_id=did,
+        reps_buckets=reps_buckets,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/representations-buckets/stream")
+def rag_representations_buckets_stream(body: RepresentationsBucketsRequest):
+    """SSE: sources + streaming representations-buckets JSON (**reps_buckets_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_representations_buckets_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                REPRESENTATIONS_BUCKETS_JSON_SYSTEM,
                 user,
                 temperature=0.0,
                 max_tokens=8192,
