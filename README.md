@@ -75,6 +75,7 @@ legal-api
    - `GET /v1/metrics/prometheus` — Prometheus text exposition for scraping
    - `GET /v1/ollama/host` — native daemon introspection: **`/api/version`** + **`/api/ps`** (running models on the machine)
    - `GET /v1/ollama/version` — lightweight **`GET /api/version`** from the Ollama daemon (single-purpose; also folded into preflight deep)
+   - `GET /v1/ollama/ps` — native **`/api/ps`** JSON (models currently loaded in the daemon — complements **`GET /v1/ollama/host`**)
    - `POST /v1/ollama/embed-proxy` — raw **`POST /api/embed`** passthrough (full daemon JSON; defaults **`model`** to **`OLLAMA_EMBEDDING_MODEL`**)
    - `GET /v1/embeddings/info` — resolved embedding provider/model env + vector **dimension** + probe encode timing
    - `POST /v1/embeddings/warmup` — forces embedding backend load (sentence-transformers or Ollama `/api/embed`)
@@ -93,7 +94,9 @@ legal-api
    - `POST /v1/documents/purge` — JSON `{ "doc_ids": ["...", "..."] }` batch-delete vectors (≤200 ids)
    - `POST /v1/rag/near-duplicate-chunks` — intra-**doc_id** chunk pairs above a cosine threshold (bounded chunk count; uses same embedding backend as RAG — OCR overlap / duplicate page QA)
    - `POST /v1/rag/document-summary` — retrieval scoped to one **`doc_id`** + **synthesis**-task memo (grounded summary via **`SUMMARIZE_SYSTEM`**; **`retrieval_query`** drives chunk selection)
+   - `POST /v1/rag/compare-documents` — retrieval from **two** **`doc_id`** values + specialist comparison (**`COMPARE_DOCUMENTS_SYSTEM`**); optional **`limit_per_document`**
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
+   - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
    - `POST /v1/ingest/local` — JSON body `{ "path": "/absolute/file.pdf", "use_ocr": false }` — only if `LEGAL_INTEL_ALLOW_LOCAL_PATHS` lists allowed absolute directory prefixes (comma-separated)
    - `POST /v1/ingest/batch` — many PDFs in one request → `{ items[], errors[] }`
@@ -101,6 +104,7 @@ legal-api
    - `POST /v1/analyze/stream` — **SSE** (`text/event-stream`) LangGraph step updates + final merged state
    - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources); optional JSON **`limit`** (1–128) overrides **`RETRIEVAL_TOP_K`** for that call
    - `POST /v1/query/batch` — multiple grounded questions in one request (shared **`doc_id`** / **`limit`**; sequential specialist calls — fewer round trips for agent pipelines)
+   - `POST /v1/query/retrieve-only/batch` — batch **`retrieve-only`** (no LLM; contexts + sources per question)
    - `POST /v1/query/retrieve-only` — same retrieval + **`formatted_context`** as `/v1/query`, but **no LLM** (sources + context only); supports **`limit`** override
    - `POST /v1/ollama/generate` — forwards non-streaming requests to Ollama’s native **`POST /api/generate`** (model, prompt, optional `system`, `options`; uses origin from `OLLAMA_BASE_URL`)
    - `POST /v1/ollama/chat` — Ollama **`POST /api/chat`** (multi-turn **`messages`**, non-streaming; optional **`options`** merge)
@@ -108,6 +112,7 @@ legal-api
    - `GET /v1/system/snapshot` — Unix load averages + optional **psutil** top RSS processes (`top_n` query param)
    - `GET /v1/system/process` — this API worker’s **PID**, RSS, optional thread/cpu snapshot (**psutil**)
    - `POST /v1/maintenance/optimize-sqlite` — **`PRAGMA optimize`** on the runs DB when **`PERSIST_RUNS=1`** (planner stats / lightweight maintenance)
+   - `POST /v1/maintenance/integrity-sqlite` — **`PRAGMA integrity_check`** on the runs DB when **`PERSIST_RUNS=1`**
    - `POST /v1/maintenance/vacuum-sqlite` — runs **`VACUUM`** on the runs SQLite DB when **`PERSIST_RUNS=1`** (returns before/after file sizes)
 
 3. Point the **API base URL** in `index.html` (saved in browser localStorage) at your running server. Set `LEGAL_INTEL_CORS_ORIGINS` on the API if you restrict origins (default allows `*`).

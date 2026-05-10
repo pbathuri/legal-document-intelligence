@@ -924,3 +924,153 @@ def test_optimize_sqlite(tmp_path, monkeypatch):
         assert r.status_code == 200
         assert r.json().get("pragma_optimize") is True
     get_settings.cache_clear()
+
+
+def test_retrieve_only_batch(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="rob1",
+        doc_label="c.pdf",
+        chunks=[
+            ("Payment net thirty days from invoice.", {"page_start": 1, "page_end": 1}),
+            ("Governing law is Delaware.", {"page_start": 2, "page_end": 2}),
+        ],
+    )
+    r = api_client.post(
+        "/v1/query/retrieve-only/batch",
+        json={
+            "questions": ["What is payment term?", "What is governing law?"],
+            "doc_id": "rob1",
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["items"]) == 2
+    assert data["retrieval_top_k_per_item"] >= 1
+    for item in data["items"]:
+        assert item["formatted_context"]
+        assert len(item["sources"]) >= 1
+        assert "answer" not in item
+
+
+def test_compare_documents(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="cmp_a",
+        doc_label="a.pdf",
+        chunks=[
+            ("Party A shall pay Party B within 14 days.", {"page_start": 1, "page_end": 1}),
+        ],
+    )
+    store.upsert_document_chunks(
+        doc_id="cmp_b",
+        doc_label="b.pdf",
+        chunks=[
+            (
+                "Payment is due within 30 calendar days of invoice.",
+                {"page_start": 1, "page_end": 1},
+            ),
+        ],
+    )
+    r = api_client.post(
+        "/v1/rag/compare-documents",
+        json={
+            "doc_id_a": "cmp_a",
+            "doc_id_b": "cmp_b",
+            "retrieval_query": "payment days invoice",
+            "instruction": "List payment timing differences only.",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doc_id_a"] == "cmp_a"
+    assert body["doc_id_b"] == "cmp_b"
+    assert body["comparison"]
+    assert len(body["sources_a"]) >= 1
+    assert len(body["sources_b"]) >= 1
+
+
+def test_ollama_ps_mocked(monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from unittest.mock import patch
+
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    fake = {"models": [{"name": "llama3.2", "size": 1, "digest": "x"}]}
+    with patch(
+        "legal_intel.api.main.fetch_ollama_running_models",
+        return_value=fake,
+    ):
+        with TestClient(app) as client:
+            r = client.get("/v1/ollama/ps")
+            assert r.status_code == 200
+            assert r.json() == fake
+    get_settings.cache_clear()
+
+
+def test_integrity_sqlite(tmp_path, monkeypatch):
+    db = tmp_path / "int.db"
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_RUNS", "1")
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+    from legal_intel.persistence.runs import insert_run
+
+    insert_run(
+        db_path=db,
+        domain="mna",
+        query="q",
+        doc_ids=[],
+        result={"final_report": "x"},
+    )
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.post("/v1/maintenance/integrity-sqlite")
+        assert r.status_code == 200
+        out = r.json()
+        assert out.get("ok") is True
+        assert out.get("integrity_check") == "ok"
+    get_settings.cache_clear()
+
+
+def test_uploads_files_list(tmp_path, monkeypatch):
+    store_dir = tmp_path / "upload_store"
+    store_dir.mkdir()
+    (store_dir / "sample.bin").write_bytes(b"abc")
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_UPLOADS", "1")
+    monkeypatch.setenv("UPLOAD_STORAGE_DIR", str(store_dir))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.get("/v1/uploads/files")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["scanned_files"] >= 1
+        names = {f["relative_path"] for f in body["files"]}
+        assert "sample.bin" in names
+    get_settings.cache_clear()

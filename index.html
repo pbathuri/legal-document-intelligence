@@ -292,9 +292,11 @@
         <button type="button" id="btnOllamaHost">Ollama host</button>
         <button type="button" id="btnIndexedDocs">Indexed documents</button>
         <button type="button" id="btnManifest">Upload manifest</button>
+        <button type="button" id="btnUploadFiles" title="GET /v1/uploads/files">Upload dir files</button>
         <button type="button" id="btnWarmupEmbed">Warmup embeddings</button>
         <button type="button" id="btnEmbInfo" title="GET /v1/embeddings/info">Embeddings info</button>
         <button type="button" id="btnOllamaVer" title="GET /v1/ollama/version">Ollama version</button>
+        <button type="button" id="btnOllamaPs" title="GET /v1/ollama/ps">Ollama loaded models</button>
         <button type="button" id="btnSearchRuns">Search runs</button>
         <button type="button" id="btnExportRunsJson">Export runs (JSON)</button>
         <button type="button" id="btnExportRuns">Export runs (NDJSON)</button>
@@ -304,6 +306,7 @@
         <button type="button" id="btnProcInfo" title="GET /v1/system/process">API process</button>
         <button type="button" id="btnVacuumSqlite" title="POST /v1/maintenance/vacuum-sqlite">Vacuum runs DB</button>
         <button type="button" id="btnOptimizeSqlite" title="POST /v1/maintenance/optimize-sqlite">Optimize runs DB</button>
+        <button type="button" id="btnIntegritySqlite" title="POST /v1/maintenance/integrity-sqlite">Integrity check</button>
       </div>
       <div class="row" style="margin-top:0.65rem;">
         <label for="ollamaShowModel" style="margin:0;align-self:center;">Ollama model inspect</label>
@@ -394,6 +397,7 @@
       <input type="number" id="batchLimit" min="1" max="128" placeholder="Server default" style="max-width:12rem;" />
       <div class="row" style="margin-top:0.65rem;">
         <button type="button" class="primary" id="btnQueryBatch">Run batch</button>
+        <button type="button" id="btnRetrieveBatchOnly" title="POST /v1/query/retrieve-only/batch">Retrieve batch only</button>
       </div>
       <pre class="sources" id="batchOut" style="margin-top:0.65rem;display:none;max-height:280px;"></pre>
     </div>
@@ -439,6 +443,25 @@
         <button type="button" class="primary" id="btnDocSummary">Summarize</button>
       </div>
       <pre class="sources" id="sumOut" style="margin-top:0.65rem;display:none;max-height:280px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>RAG · compare two documents</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;"><code>POST /v1/rag/compare-documents</code> — retrieval per doc + specialist comparison (grounded).</p>
+      <label for="cmpDocA">doc_id A</label>
+      <input type="text" id="cmpDocA" autocomplete="off" />
+      <label for="cmpDocB" style="margin-top:0.65rem;">doc_id B</label>
+      <input type="text" id="cmpDocB" autocomplete="off" />
+      <label for="cmpRq" style="margin-top:0.65rem;">Retrieval query</label>
+      <input type="text" id="cmpRq"
+        value="obligations indemnity governing law consideration parties warranty"
+        autocomplete="off" />
+      <label for="cmpInstr" style="margin-top:0.65rem;">Instruction</label>
+      <textarea id="cmpInstr" style="min-height:72px;">Highlight material similarities and differences based only on excerpts.</textarea>
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnCompareDocs">Compare</button>
+      </div>
+      <pre class="sources" id="cmpOut" style="margin-top:0.65rem;display:none;max-height:320px;"></pre>
     </div>
 
     <div class="card" style="margin-top:1rem;">
@@ -810,6 +833,15 @@
         alert(e.message || String(e));
       }
     };
+    $("btnUploadFiles").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/uploads/files?limit=120");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
     $("btnWarmupEmbed").onclick = async () => {
       try {
         const res = await fetch(apiUrl("/v1/embeddings/warmup"), { method: "POST" });
@@ -832,6 +864,15 @@
     $("btnOllamaVer").onclick = async () => {
       try {
         const r = await fetchJson("/v1/ollama/version");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnOllamaPs").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/ollama/ps");
         $("metaOut").style.display = "block";
         $("metaOut").textContent = JSON.stringify(r, null, 2);
       } catch (e) {
@@ -905,6 +946,27 @@
     $("btnOptimizeSqlite").onclick = async () => {
       try {
         const res = await fetch(apiUrl("/v1/maintenance/optimize-sqlite"), { method: "POST" });
+        const text = await res.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = { raw: text };
+        }
+        if (!res.ok) {
+          const detail = data?.detail || data?.message || text || res.statusText;
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        }
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnIntegritySqlite").onclick = async () => {
+      try {
+        const res = await fetch(apiUrl("/v1/maintenance/integrity-sqlite"), { method: "POST" });
         const text = await res.text();
         let data = null;
         try {
@@ -1269,6 +1331,32 @@
       }
     };
 
+    $("btnRetrieveBatchOnly").onclick = async () => {
+      try {
+        const lines = $("batchQ").value.split("\n").map((s) => s.trim()).filter(Boolean);
+        if (!lines.length) throw new Error("Enter at least one question line.");
+        const payload = {
+          questions: lines.slice(0, 24),
+          doc_id: $("batchDoc").value.trim() || null,
+        };
+        const limRaw = ($("batchLimit").value || "").trim();
+        if (limRaw !== "") {
+          const n = parseInt(limRaw, 10);
+          if (!Number.isFinite(n) || n < 1 || n > 128) throw new Error("Limit must be 1–128.");
+          payload.limit = n;
+        }
+        const out = await fetchJson("/v1/query/retrieve-only/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        $("batchOut").style.display = "block";
+        $("batchOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
     $("btnDocSummary").onclick = async () => {
       try {
         const doc_id = $("sumDocId").value.trim();
@@ -1291,6 +1379,29 @@
         });
         $("sumOut").style.display = "block";
         $("sumOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnCompareDocs").onclick = async () => {
+      try {
+        const doc_id_a = $("cmpDocA").value.trim();
+        const doc_id_b = $("cmpDocB").value.trim();
+        if (!doc_id_a || !doc_id_b) throw new Error("Enter both doc ids.");
+        const payload = {
+          doc_id_a,
+          doc_id_b,
+          retrieval_query: $("cmpRq").value.trim() || "obligations terms",
+          instruction: $("cmpInstr").value.trim() || "Compare the excerpts.",
+        };
+        const out = await fetchJson("/v1/rag/compare-documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        $("cmpOut").style.display = "block";
+        $("cmpOut").textContent = JSON.stringify(out, null, 2);
       } catch (e) {
         alert(e.message || String(e));
       }

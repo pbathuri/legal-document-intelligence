@@ -221,6 +221,50 @@ class OllamaEmbedProxyRequest(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
 
 
+class RetrieveBatchItem(BaseModel):
+    question: str
+    sources: list[dict[str, Any]]
+    formatted_context: str
+    retrieval_top_k: int
+
+
+class RetrieveBatchResponse(BaseModel):
+    items: list[RetrieveBatchItem]
+    retrieval_top_k_per_item: int
+
+
+class CompareDocumentsRequest(BaseModel):
+    """Retrieve from two ``doc_id`` values then specialist comparison (Ollama when configured)."""
+
+    doc_id_a: str = Field(..., min_length=1)
+    doc_id_b: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="obligations indemnity governing law consideration parties definitions title warranty",
+        min_length=1,
+        max_length=4000,
+    )
+    instruction: str = Field(
+        default="Compare and contrast the two documents based ONLY on the excerpts.",
+        min_length=1,
+        max_length=12000,
+    )
+    limit_per_document: int | None = Field(
+        default=None,
+        ge=2,
+        le=64,
+        description="Chunks per side; default half of configured retrieval_top_k (minimum 2).",
+    )
+
+
+class CompareDocumentsResponse(BaseModel):
+    doc_id_a: str
+    doc_id_b: str
+    comparison: str
+    sources_a: list[dict[str, Any]]
+    sources_b: list[dict[str, Any]]
+    retrieval_top_k_per_side: int
+
+
 class RunSummaryOut(BaseModel):
     id: str
     created_at: str

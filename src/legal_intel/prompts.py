@@ -37,6 +37,11 @@ Produce markdown with: Executive summary (concise bullets), Key parties / instru
 Material obligations or property interests (only if in excerpts), Red flags or gaps in the excerpts themselves.
 Use ONLY the CONTEXT. If excerpts are empty or insufficient, say so clearly — do not invent facts or citations."""
 
+COMPARE_DOCUMENTS_SYSTEM = """You compare two sets of legal document excerpts labeled DOCUMENT A and DOCUMENT B.
+Output markdown with: Alignment (where they agree or mirror), Contrasts (material differences),
+Conflict or ambiguity signals (only if grounded in excerpts), and Limitations (what cannot be compared because it is missing).
+Use ONLY the provided excerpts. Never invent clause numbers, statutes, or facts not shown."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

@@ -20,6 +20,8 @@ from legal_intel.api.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
     BatchIngestResponse,
+    CompareDocumentsRequest,
+    CompareDocumentsResponse,
     DocumentPurgeBatchRequest,
     DocumentSummaryRequest,
     DocumentSummaryResponse,
@@ -40,6 +42,8 @@ from legal_intel.api.schemas import (
     QueryBatchResponse,
     QueryRequest,
     QueryResponse,
+    RetrieveBatchItem,
+    RetrieveBatchResponse,
     RetrieveOnlyResponse,
     RunSummaryOut,
     RuntimeOut,
@@ -57,10 +61,16 @@ from legal_intel.persistence.runs import (
     list_runs,
     optimize_sqlite_file,
     search_runs,
+    sqlite_integrity_check,
     vacuum_sqlite_file,
 )
 from legal_intel.pipeline import doc_id_from_pdf_bytes, ingest_pdf_with_stats
-from legal_intel.prompts import QUERY_SYSTEM, SUMMARIZE_SYSTEM, format_context_block
+from legal_intel.prompts import (
+    COMPARE_DOCUMENTS_SYSTEM,
+    QUERY_SYSTEM,
+    SUMMARIZE_SYSTEM,
+    format_context_block,
+)
 from legal_intel.rag.store import LegalVectorStore
 from legal_intel.runtime.api_metrics import bucket_path as metrics_bucket_path
 from legal_intel.runtime.api_metrics import incr_request as metrics_incr_request
@@ -74,8 +84,10 @@ from legal_intel.runtime.process_info import gather_api_process_snapshot
 from legal_intel.runtime.ollama_chat_proxy import ollama_native_chat
 from legal_intel.runtime.ollama_generate_proxy import ollama_native_generate
 from legal_intel.runtime.ollama_show_proxy import ollama_native_show
+from legal_intel.runtime.ollama_ps_proxy import fetch_ollama_running_models
 from legal_intel.runtime.ollama_version_proxy import ollama_native_version
 from legal_intel.runtime.system_snapshot import gather_system_snapshot
+from legal_intel.runtime.uploads_scan import list_upload_storage_files
 from legal_intel.runtime.local_paths import is_path_under_allowlist, parse_allow_prefixes
 from legal_intel.runtime.ollama_probe import (
     fetch_ollama_model_names,
@@ -221,7 +233,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.12.0",
+    version="0.13.0",
 )
 
 _origins = _cors_origins()
@@ -506,6 +518,19 @@ def ollama_daemon_version() -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
+@app.get("/v1/ollama/ps")
+def ollama_running_processes() -> dict[str, Any]:
+    """Native ``/api/ps`` — models loaded in memory on the local Ollama daemon."""
+    s = get_settings()
+    try:
+        return fetch_ollama_running_models(
+            s.ollama_base_url,
+            timeout_seconds=max(15.0, s.ollama_probe_timeout_seconds * 8),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
 @app.post("/v1/ollama/generate")
 def ollama_generate_native(body: OllamaGenerateRequest) -> dict[str, Any]:
     """
@@ -630,6 +655,20 @@ def maintenance_optimize_runs_db() -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Run persistence disabled")
     try:
         return optimize_sqlite_file(Path(s.runs_db_path))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/maintenance/integrity-sqlite")
+def maintenance_integrity_runs_db() -> dict[str, Any]:
+    """SQLite ``PRAGMA integrity_check`` on the runs database (requires ``persist_runs``)."""
+    s = get_settings()
+    if not s.persist_runs:
+        raise HTTPException(status_code=400, detail="Run persistence disabled")
+    try:
+        return sqlite_integrity_check(Path(s.runs_db_path))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
@@ -935,6 +974,16 @@ def uploads_manifest(tail: int = 80) -> dict[str, Any]:
     return tail_upload_manifest(s.upload_storage_dir, tail_lines=tail)
 
 
+@app.get("/v1/uploads/files")
+def uploads_directory_listing(limit: int = 100) -> dict[str, Any]:
+    """Bounded listing of files under ``UPLOAD_STORAGE_DIR`` (mtime-descending)."""
+    s = get_settings()
+    if not s.persist_uploads:
+        raise HTTPException(status_code=400, detail="Upload persistence disabled")
+    lim = max(1, min(limit, 500))
+    return list_upload_storage_files(s.upload_storage_dir, limit=lim)
+
+
 @app.get("/v1/documents")
 def list_indexed_documents(max_points: int = 4000) -> dict[str, Any]:
     """Distinct indexed documents by scanning chunk payloads (bounded work)."""
@@ -1018,6 +1067,45 @@ def rag_document_summary(body: DocumentSummaryRequest) -> DocumentSummaryRespons
         summary=summary,
         sources=_rag_sources_from_hits(hits),
         retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/compare-documents", response_model=CompareDocumentsResponse)
+def rag_compare_documents(body: CompareDocumentsRequest) -> CompareDocumentsResponse:
+    """Side-by-side retrieval from two indexed docs + specialist comparison (local Ollama / routed LLM)."""
+    store = LegalVectorStore()
+    s = get_settings()
+    da = body.doc_id_a.strip()
+    db = body.doc_id_b.strip()
+    if da == db:
+        raise HTTPException(status_code=400, detail="doc_id_a and doc_id_b must differ")
+    rq = body.retrieval_query.strip()
+    if body.limit_per_document is not None:
+        per = min(max(body.limit_per_document, 2), 64)
+    else:
+        per = max(2, min(32, s.retrieval_top_k // 2))
+    hits_a = store.search(rq, limit=per, doc_id=da)
+    hits_b = store.search(rq, limit=per, doc_id=db)
+    ctx_a = format_context_block(hits_a)
+    ctx_b = format_context_block(hits_b)
+    user = (
+        f"INSTRUCTION:\n{body.instruction.strip()}\n\n"
+        f"DOCUMENT A (doc_id={da}):\n{ctx_a}\n\n"
+        f"DOCUMENT B (doc_id={db}):\n{ctx_b}"
+    )
+    comparison = chat_complete(
+        COMPARE_DOCUMENTS_SYSTEM,
+        user,
+        temperature=0.06,
+        task="specialist",
+    )
+    return CompareDocumentsResponse(
+        doc_id_a=da,
+        doc_id_b=db,
+        comparison=comparison,
+        sources_a=_rag_sources_from_hits(hits_a),
+        sources_b=_rag_sources_from_hits(hits_b),
+        retrieval_top_k_per_side=per,
     )
 
 
@@ -1109,6 +1197,29 @@ def rag_retrieve_only(body: QueryRequest) -> RetrieveOnlyResponse:
         formatted_context=ctx,
         retrieval_top_k=lim,
     )
+
+
+@app.post("/v1/query/retrieve-only/batch", response_model=RetrieveBatchResponse)
+def rag_retrieve_only_batch(body: QueryBatchRequest) -> RetrieveBatchResponse:
+    """Batch retrieval + formatted context blocks without LLM calls (debug / agent prefetch)."""
+    lim = _batch_retrieval_limit(body.limit)
+    store = LegalVectorStore()
+    items: list[RetrieveBatchItem] = []
+    for raw_q in body.questions:
+        q = (raw_q or "").strip()
+        if not q:
+            raise HTTPException(status_code=400, detail="Each question must be non-empty")
+        hits = store.search(q, limit=lim, doc_id=body.doc_id)
+        ctx = format_context_block(hits)
+        items.append(
+            RetrieveBatchItem(
+                question=q,
+                sources=_rag_sources_from_hits(hits),
+                formatted_context=ctx,
+                retrieval_top_k=lim,
+            )
+        )
+    return RetrieveBatchResponse(items=items, retrieval_top_k_per_item=lim)
 
 
 @app.post("/v1/query/stream")

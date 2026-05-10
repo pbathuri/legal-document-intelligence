@@ -133,6 +133,24 @@ def search_runs(*, db_path: Path, q: str, limit: int = 40) -> list[RunSummary]:
     return out
 
 
+def sqlite_integrity_check(db_path: Path) -> dict[str, Any]:
+    """Run ``PRAGMA integrity_check`` on an SQLite file."""
+    db_path = Path(db_path)
+    if not db_path.is_file():
+        raise FileNotFoundError(str(db_path.resolve()))
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute("PRAGMA integrity_check").fetchone()
+        msg = str(row[0]) if row else ""
+        return {
+            "path": str(db_path.resolve()),
+            "integrity_check": msg,
+            "ok": msg == "ok",
+        }
+    finally:
+        conn.close()
+
+
 def optimize_sqlite_file(db_path: Path) -> dict[str, Any]:
     """Run ``PRAGMA optimize`` on an SQLite database (query planner stats; local maintenance)."""
     db_path = Path(db_path)
