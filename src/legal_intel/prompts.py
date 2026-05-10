@@ -165,6 +165,23 @@ Respond with ONE JSON object:
 Rules: Order sections roughly as they appear in CONTEXT ordering; merge duplicates. If CONTEXT lacks headings, infer coarse sections from substance.
 Never invent article numbers not grounded in excerpts."""
 
+DILIGENCE_CHECKLIST_JSON_SYSTEM = """[diligence_checklist_v1]
+You derive a practical M&A / transaction diligence checklist from legal CONTEXT excerpts ONLY ([n]).
+Respond with ONE JSON object:
+{
+  "items": [
+    {
+      "category": "<short bucket: Tax, Employment, IP, Regulatory, Commercial, ...>",
+      "check": "<specific verification step or document request grounded in excerpts>",
+      "priority": "P0"|"P1"|"P2",
+      "evidence_refs": [<integers — [n] indices supporting why this check matters>]
+    }
+  ],
+  "limitations": "<topics not visible in CONTEXT — cannot checklist>"
+}
+Rules: Prioritize material gaps implied by excerpts; avoid generic boilerplate not tied to CONTEXT.
+If excerpts are thin, return fewer items with honest limitations. Never invent statutes or party-specific facts not in excerpts."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

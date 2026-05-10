@@ -1745,3 +1745,105 @@ def test_runtime_rlimits(api_client):
     body = r.json()
     assert "platform" in body
     assert "rlimits_available" in body or "note" in body
+
+
+def test_runtime_sys_path(api_client):
+    r = api_client.get("/v1/runtime/sys-path")
+    assert r.status_code == 200
+    j = r.json()
+    assert "paths" in j
+    assert j["shown_count"] >= 1
+
+
+def test_embeddings_nearest_to_query(api_client):
+    r = api_client.post(
+        "/v1/embeddings/nearest-to-query",
+        json={
+            "query": "indemnity survival period after closing",
+            "candidates": [
+                "Indemnity obligations survive for twenty-four months.",
+                "The confidentiality clause lasts five years.",
+                "Parking spaces are allocated in Schedule B.",
+            ],
+        },
+    )
+    assert r.status_code == 200
+    d = r.json()
+    assert len(d["ranked"]) == 3
+    assert d["ranked"][0]["index"] in (0, 1, 2)
+    assert d["dimension"] > 0
+
+
+def test_cross_document_contradictions_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="cx1",
+        doc_label="a.pdf",
+        chunks=[("Cap on liability is ten million.", {"page_start": 1, "page_end": 1})],
+    )
+    store.upsert_document_chunks(
+        doc_id="cx2",
+        doc_label="b.pdf",
+        chunks=[("Liability is uncapped for fraud.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/cross-document-contradictions/stream",
+        json={"doc_ids": ["cx1", "cx2"], "retrieval_query": "liability cap"},
+    )
+    assert r.status_code == 200
+    assert "sources_by_doc_id" in r.text and "done" in r.text
+
+
+def test_document_outline_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="dos1",
+        doc_label="o.pdf",
+        chunks=[("Section 4.2 — Non-compete for twelve months post-closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/document-outline/stream",
+        json={"doc_id": "dos1", "retrieval_query": "non-compete"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text and "done" in r.text
+
+
+def test_diligence_checklist(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="dd1",
+        doc_label="dd.pdf",
+        chunks=[("Environmental permits must be transferred before Closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/diligence-checklist",
+        json={"doc_id": "dd1", "retrieval_query": "environmental permits closing"},
+    )
+    assert r.status_code == 200
+    b = r.json()
+    assert b["checklist"]
+    assert b["doc_id"] == "dd1"
+
+
+def test_diligence_checklist_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="dds1",
+        doc_label="x.pdf",
+        chunks=[("Tax returns for three fiscal years shall be provided in the data room.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/diligence-checklist/stream",
+        json={"doc_id": "dds1", "retrieval_query": "tax"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text and "done" in r.text

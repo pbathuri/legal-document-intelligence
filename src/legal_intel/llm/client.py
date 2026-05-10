@@ -283,6 +283,21 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "diligence_checklist_v1" in system:
+            return json.dumps(
+                {
+                    "items": [
+                        {
+                            "category": "[MOCK] Commercial",
+                            "check": "[MOCK] Confirm working capital mechanics against disclosed schedules.",
+                            "priority": "P1",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real diligence checklist.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

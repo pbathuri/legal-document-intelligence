@@ -18,6 +18,48 @@ def cosine_similarity_uvec(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
+def rank_candidates_by_query_embedding(*, query: str, candidates: list[str]) -> dict[str, Any]:
+    """Encode query + candidates in one batch; return candidates sorted by cosine similarity to query (desc)."""
+    from legal_intel.rag.embeddings import make_embedding_model
+
+    q = (query or "").strip()
+    cleaned = [(t or "").strip() for t in candidates]
+    if not q:
+        raise ValueError("query must be non-empty")
+    if not cleaned:
+        raise ValueError("Provide at least one candidate text")
+    if any(not x for x in cleaned):
+        raise ValueError("Each candidate must be non-empty")
+    if len(cleaned) > 64:
+        raise ValueError("At most 64 candidate texts")
+    m = make_embedding_model()
+    all_texts = [q] + cleaned
+    vecs = m.encode(all_texts)
+    qv = vecs[0]
+    dim = len(qv)
+    ranked_raw: list[tuple[float, int]] = []
+    for i, tv in enumerate(vecs[1:], start=0):
+        sim = cosine_similarity_uvec(qv, tv)
+        ranked_raw.append((sim, i))
+    ranked_raw.sort(key=lambda x: x[0], reverse=True)
+    ranked: list[dict[str, Any]] = []
+    for sim, i in ranked_raw:
+        prev = cleaned[i][:120] + ("…" if len(cleaned[i]) > 120 else "")
+        ranked.append(
+            {
+                "index": i,
+                "cosine_similarity": round(float(sim), 8),
+                "text_preview": prev,
+            }
+        )
+    qp = q[:400] + ("…" if len(q) > 400 else "")
+    return {
+        "dimension": dim,
+        "query_preview": qp,
+        "ranked": ranked,
+    }
+
+
 def centroid_similarities_for_texts(texts: list[str]) -> dict[str, Any]:
     """Mean embedding vector (element-wise) + cosine similarity of each row to that centroid."""
     from legal_intel.rag.embeddings import make_embedding_model

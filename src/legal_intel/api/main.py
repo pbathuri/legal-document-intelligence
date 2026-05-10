@@ -71,6 +71,11 @@ from legal_intel.api.schemas import (
     DocumentOutlineResponse,
     EmbeddingCentroidRequest,
     EmbeddingCentroidResponse,
+    EmbeddingNearestQueryRequest,
+    EmbeddingNearestQueryResponse,
+    EmbeddingNearestRankItem,
+    DiligenceChecklistRequest,
+    DiligenceChecklistResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -111,6 +116,7 @@ from legal_intel.prompts import (
     GLOSSARY_JSON_SYSTEM,
     CONTRADICTIONS_JSON_SYSTEM,
     DOCUMENT_OUTLINE_JSON_SYSTEM,
+    DILIGENCE_CHECKLIST_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -128,6 +134,7 @@ from legal_intel.runtime.chunk_near_duplicate import near_duplicate_chunk_pairs
 from legal_intel.runtime.embedding_similarity import (
     centroid_similarities_for_texts,
     pairwise_cosine_matrix_for_texts,
+    rank_candidates_by_query_embedding,
     similarity_for_text_pair,
 )
 from legal_intel.runtime.host_metrics import gather_extended_host_metrics
@@ -389,6 +396,16 @@ def _prepare_outline_extract_parts(
     )
 
 
+def _prepare_diligence_checklist_parts(
+    body: DiligenceChecklistRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -470,7 +487,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.20.0",
+    version="0.21.0",
 )
 
 _origins = _cors_origins()
@@ -895,6 +912,42 @@ def embedding_centroid_similarities(body: EmbeddingCentroidRequest) -> Embedding
     )
 
 
+@app.post("/v1/embeddings/nearest-to-query", response_model=EmbeddingNearestQueryResponse)
+def embedding_rank_by_query(body: EmbeddingNearestQueryRequest) -> EmbeddingNearestQueryResponse:
+    """Rank ``candidates`` by cosine similarity to ``query`` (single batched encode — local Ollama / ST)."""
+    max_chars = 64_000
+    q = (body.query or "").strip()
+    if len(q) > max_chars:
+        raise HTTPException(status_code=400, detail=f"query exceeds {max_chars} characters")
+    cleaned: list[str] = []
+    for i, t in enumerate(body.candidates):
+        ts = (t or "").strip()
+        if not ts:
+            raise HTTPException(status_code=400, detail=f"candidates[{i}] is empty")
+        if len(ts) > max_chars:
+            raise HTTPException(
+                status_code=400,
+                detail=f"candidates[{i}] exceeds {max_chars} characters",
+            )
+        cleaned.append(ts)
+    s = get_settings()
+    try:
+        out = rank_candidates_by_query_embedding(query=q, candidates=cleaned)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    ranked = [EmbeddingNearestRankItem(**row) for row in out["ranked"]]
+    return EmbeddingNearestQueryResponse(
+        dimension=int(out["dimension"]),
+        query_preview=str(out["query_preview"]),
+        ranked=ranked,
+        embedding_provider=s.embedding_provider,
+        ollama_embedding_model=s.ollama_embedding_model,
+        embedding_model=s.embedding_model,
+    )
+
+
 @app.get("/v1/build")
 def build_metadata() -> dict[str, Any]:
     """Package / Python / optional git SHA (set ``LEGAL_INTEL_GIT_SHA`` in deploy)."""
@@ -1271,6 +1324,20 @@ def runtime_local_path_allowlist() -> dict[str, Any]:
 def runtime_rlimits() -> dict[str, Any]:
     """Unix ``resource.getrlimit`` snapshot (NOFILE, stack, AS, …); informative on macOS/Linux."""
     return gather_rlimits_snapshot()
+
+
+@app.get("/v1/runtime/sys-path")
+def runtime_sys_path(limit: int = 64) -> dict[str, Any]:
+    """Bounded ``sys.path`` listing for interpreter / plugin debugging on the API host."""
+    lim = max(8, min(limit, 128))
+    total = len(sys.path)
+    shown = sys.path[:lim]
+    return {
+        "paths": shown,
+        "shown_count": len(shown),
+        "total_entries": total,
+        "truncated": total > lim,
+    }
 
 
 @app.get("/v1/settings/effective")
@@ -1770,6 +1837,36 @@ def rag_cross_document_contradictions(body: ContradictionsScanRequest) -> Contra
     )
 
 
+@app.post("/v1/rag/cross-document-contradictions/stream")
+def rag_cross_document_contradictions_stream(body: ContradictionsScanRequest):
+    """SSE: multi-doc ``sources_by_doc_id`` + streaming contradictions JSON (**contradictions_scan_v1**)."""
+
+    def event_gen():
+        try:
+            ordered, user, sources_per, per = _prepare_cross_document_summary_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_ids": ordered,
+                    "sources_by_doc_id": sources_per,
+                    "retrieval_top_k_per_document": per,
+                }
+            )
+            for piece in chat_stream(
+                CONTRADICTIONS_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
 @app.post("/v1/rag/structured-extract", response_model=StructuredExtractResponse)
 def rag_structured_extract(body: StructuredExtractRequest) -> StructuredExtractResponse:
     """Retrieval + ``json_object`` extraction for caller-defined category keys (extraction-task routing)."""
@@ -1983,6 +2080,91 @@ def rag_document_outline(body: DocumentOutlineRequest) -> DocumentOutlineRespons
         sources=sources,
         retrieval_top_k=lim,
     )
+
+
+@app.post("/v1/rag/document-outline/stream")
+def rag_document_outline_stream(body: DocumentOutlineRequest):
+    """SSE: sources + streaming outline JSON (**document_outline_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_outline_extract_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                DOCUMENT_OUTLINE_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/diligence-checklist", response_model=DiligenceChecklistResponse)
+def rag_diligence_checklist(body: DiligenceChecklistRequest) -> DiligenceChecklistResponse:
+    """Single-doc retrieval + JSON diligence checklist (**diligence_checklist_v1**)."""
+    did, user, sources, lim = _prepare_diligence_checklist_parts(body)
+    raw = chat_complete_json(
+        DILIGENCE_CHECKLIST_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        checklist: dict[str, Any] = json.loads(raw)
+        if not isinstance(checklist, dict):
+            checklist = {"_value": checklist}
+    except Exception:
+        checklist = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return DiligenceChecklistResponse(
+        doc_id=did,
+        checklist=checklist,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/diligence-checklist/stream")
+def rag_diligence_checklist_stream(body: DiligenceChecklistRequest):
+    """SSE: sources + streaming diligence checklist JSON (**diligence_checklist_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_diligence_checklist_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                DILIGENCE_CHECKLIST_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
 @app.post("/v1/analyze", response_model=AnalyzeResponse)

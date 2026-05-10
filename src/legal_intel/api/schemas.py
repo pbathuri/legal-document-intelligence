@@ -571,3 +571,44 @@ class EmbeddingCentroidResponse(BaseModel):
     embedding_provider: str
     ollama_embedding_model: str = ""
     embedding_model: str = ""
+
+
+class EmbeddingNearestQueryRequest(BaseModel):
+    """Rank candidate strings by cosine similarity to one query embedding (same backend as RAG)."""
+
+    query: str = Field(..., min_length=1, max_length=64_000)
+    candidates: list[str] = Field(..., min_length=1, max_length=64)
+
+
+class EmbeddingNearestRankItem(BaseModel):
+    index: int
+    cosine_similarity: float
+    text_preview: str
+
+
+class EmbeddingNearestQueryResponse(BaseModel):
+    dimension: int
+    query_preview: str
+    ranked: list[EmbeddingNearestRankItem]
+    embedding_provider: str
+    ollama_embedding_model: str = ""
+    embedding_model: str = ""
+
+
+class DiligenceChecklistRequest(BaseModel):
+    """Single-doc retrieval + JSON diligence checklist (``diligence_checklist_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="representations warranties indemnity tax employment intellectual property regulatory permits litigation environmental benefits title material contracts customers suppliers",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class DiligenceChecklistResponse(BaseModel):
+    doc_id: str
+    checklist: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
