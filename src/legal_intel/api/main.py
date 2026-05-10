@@ -80,6 +80,12 @@ from legal_intel.api.schemas import (
     IssueSpotterResponse,
     SuggestedQuestionsRequest,
     SuggestedQuestionsResponse,
+    DealThesisRequest,
+    DealThesisResponse,
+    BibliographyExportRequest,
+    BibliographyExportResponse,
+    EmbeddingFarthestPairRequest,
+    EmbeddingFarthestPairResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -123,6 +129,8 @@ from legal_intel.prompts import (
     DILIGENCE_CHECKLIST_JSON_SYSTEM,
     ISSUE_SPOTTER_JSON_SYSTEM,
     SUGGESTED_QUESTIONS_JSON_SYSTEM,
+    DEAL_THESIS_JSON_SYSTEM,
+    BIBLIOGRAPHY_EXPORT_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -139,6 +147,7 @@ from legal_intel.runtime.git_snapshot import gather_git_snapshot
 from legal_intel.runtime.chunk_near_duplicate import near_duplicate_chunk_pairs
 from legal_intel.runtime.embedding_similarity import (
     centroid_similarities_for_texts,
+    farthest_embedding_pair,
     pairwise_cosine_matrix_for_texts,
     rank_candidates_by_query_embedding,
     similarity_for_text_pair,
@@ -165,6 +174,7 @@ from legal_intel.runtime.ollama_probe import (
 from legal_intel.runtime.ollama_warnings import build_ollama_model_warnings
 from legal_intel.runtime.ollama_deep import gather_ollama_host_snapshot
 from legal_intel.runtime.ollama_agent_stack import gather_ollama_agent_stack
+from legal_intel.runtime.platform_detail import gather_platform_detail
 from legal_intel.runtime.preflight import gather_preflight
 from legal_intel.runtime.storage_inventory import gather_storage_inventory
 from legal_intel.runtime.uploads import persist_pdf_bytes
@@ -432,6 +442,34 @@ def _prepare_suggested_questions_parts(
     )
 
 
+def _prepare_deal_thesis_parts(
+    body: DealThesisRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_bibliography_export_parts(
+    body: BibliographyExportRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    store = LegalVectorStore()
+    s = get_settings()
+    lim = body.limit if body.limit is not None else s.retrieval_top_k
+    did = body.doc_id.strip()
+    rq = body.retrieval_query.strip()
+    hits = store.search(rq, limit=lim, doc_id=did)
+    ctx = format_context_block(hits)
+    user = (
+        f"CITATION_STYLE: {body.citation_style}\n"
+        f"INSTRUCTION:\n{body.instruction.strip()}\n\n"
+        f"CONTEXT EXCERPTS:\n{ctx}"
+    )
+    return did, user, _rag_sources_from_hits(hits), lim
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -513,7 +551,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.22.0",
+    version="0.23.0",
 )
 
 _origins = _cors_origins()
@@ -974,6 +1012,45 @@ def embedding_rank_by_query(body: EmbeddingNearestQueryRequest) -> EmbeddingNear
     )
 
 
+@app.post("/v1/embeddings/farthest-pair", response_model=EmbeddingFarthestPairResponse)
+def embedding_farthest_pair_route(body: EmbeddingFarthestPairRequest) -> EmbeddingFarthestPairResponse:
+    """Among 3–40 strings, return the pair with **lowest** cosine similarity (most divergent) — same embed backend as RAG."""
+    max_chars = 64_000
+    cleaned: list[str] = []
+    for i, t in enumerate(body.texts):
+        ts = (t or "").strip()
+        if not ts:
+            raise HTTPException(status_code=400, detail=f"texts[{i}] is empty")
+        if len(ts) > max_chars:
+            raise HTTPException(
+                status_code=400,
+                detail=f"texts[{i}] exceeds {max_chars} characters",
+            )
+        cleaned.append(ts)
+    if len(cleaned) < 3:
+        raise HTTPException(status_code=400, detail="Provide at least three non-empty texts")
+    if len(cleaned) > 40:
+        raise HTTPException(status_code=400, detail="At most 40 texts")
+    s = get_settings()
+    try:
+        out = farthest_embedding_pair(cleaned)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return EmbeddingFarthestPairResponse(
+        index_a=int(out["index_a"]),
+        index_b=int(out["index_b"]),
+        cosine_similarity=float(out["cosine_similarity"]),
+        dimension=int(out["dimension"]),
+        text_preview_a=str(out["text_preview_a"]),
+        text_preview_b=str(out["text_preview_b"]),
+        embedding_provider=s.embedding_provider,
+        ollama_embedding_model=s.ollama_embedding_model,
+        embedding_model=s.embedding_model,
+    )
+
+
 @app.get("/v1/build")
 def build_metadata() -> dict[str, Any]:
     """Package / Python / optional git SHA (set ``LEGAL_INTEL_GIT_SHA`` in deploy)."""
@@ -1381,6 +1458,12 @@ def runtime_path_env_entries(limit: int = 80) -> dict[str, Any]:
         "truncated": len(parts) > lim,
         "path_separator": sep,
     }
+
+
+@app.get("/v1/runtime/platform-detail")
+def runtime_platform_detail() -> dict[str, Any]:
+    """Stdlib **platform** introspection: OS release, machine, Python build, **uname** / **libc** when available."""
+    return gather_platform_detail()
 
 
 @app.get("/v1/settings/effective")
@@ -2311,6 +2394,110 @@ def rag_suggested_questions_stream(body: SuggestedQuestionsRequest):
                 temperature=0.0,
                 max_tokens=8192,
                 task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/deal-thesis", response_model=DealThesisResponse)
+def rag_deal_thesis(body: DealThesisRequest) -> DealThesisResponse:
+    """Single-doc retrieval + JSON deal thesis (**deal_thesis_v1**)."""
+    did, user, sources, lim = _prepare_deal_thesis_parts(body)
+    raw = chat_complete_json(
+        DEAL_THESIS_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        thesis: dict[str, Any] = json.loads(raw)
+        if not isinstance(thesis, dict):
+            thesis = {"_value": thesis}
+    except Exception:
+        thesis = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return DealThesisResponse(
+        doc_id=did,
+        thesis=thesis,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/deal-thesis/stream")
+def rag_deal_thesis_stream(body: DealThesisRequest):
+    """SSE: sources + streaming deal-thesis JSON (**deal_thesis_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_deal_thesis_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                DEAL_THESIS_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/bibliography-export", response_model=BibliographyExportResponse)
+def rag_bibliography_export(body: BibliographyExportRequest) -> BibliographyExportResponse:
+    """Retrieval + markdown bibliography / excerpt digest (**BIBLIOGRAPHY_EXPORT_SYSTEM**; synthesis routing)."""
+    did, user, sources, lim = _prepare_bibliography_export_parts(body)
+    md = chat_complete(
+        BIBLIOGRAPHY_EXPORT_SYSTEM,
+        user,
+        temperature=0.08,
+        max_tokens=8192,
+        task="synthesis",
+    )
+    return BibliographyExportResponse(
+        doc_id=did,
+        bibliography_markdown=md,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/bibliography-export/stream")
+def rag_bibliography_export_stream(body: BibliographyExportRequest):
+    """SSE: sources + bibliography markdown tokens (**synthesis** routing)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_bibliography_export_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                BIBLIOGRAPHY_EXPORT_SYSTEM,
+                user,
+                temperature=0.08,
+                max_tokens=8192,
+                task="synthesis",
             ):
                 yield _sse_payload({"event": "token", "text": piece})
             yield _sse_payload({"event": "done"})

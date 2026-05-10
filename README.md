@@ -87,6 +87,7 @@ legal-api
    - `POST /v1/embeddings/pairwise-matrix` — JSON `{ "texts": ["...", ...] }` (2–24 strings) → full **N×N** cosine matrix + short text previews (same embedding backend as RAG)
    - `POST /v1/embeddings/centroid-similarities` — JSON `{ "texts": ["...", ...] }` (2–48 strings) → **mean embedding vector** + each row's cosine to that centroid (topic coherence / bundle QA)
    - `POST /v1/embeddings/nearest-to-query` — JSON `{ "query", "candidates": ["...", ...] }` (≤64 candidates) → **ranked** list by cosine similarity to the query embedding (same backend as RAG — useful for local rerank / shortlist)
+   - `POST /v1/embeddings/farthest-pair` — JSON `{ "texts": ["...", ...] }` (3–40 strings) → indices + cosine for the pair with **minimum** similarity (**most divergent** excerpts — divergence QA / contrast mining)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/runtime/storage` — bounded filesystem inventory: bytes + file counts under **`UPLOAD_STORAGE_DIR`**, **`manifest.jsonl`** size/line estimate, **`RUNS_DB_PATH`** file size (device-local maintenance)
    - `GET /v1/runtime/git` — best-effort **Git** snapshot for the API **`cwd`** (`commit`, `branch`, `dirty` when **`git`** is on **PATH**)
@@ -96,6 +97,7 @@ legal-api
    - `GET /v1/runtime/rlimits` — Unix **`resource.getrlimit`** snapshot (**NOFILE**, stack, AS, …); Windows returns a short **note** instead of limits
    - `GET /v1/runtime/sys-path` — bounded **`sys.path`** prefix (`limit` query param, default 64 entries) for interpreter / packaging debugging on the API host
    - `GET /v1/runtime/path-entries` — non-empty segments from the process **`PATH`** env var (`limit` query param, default 80; max 200) — toolchain / shell debugging on the API host
+   - `GET /v1/runtime/platform-detail` — stdlib **`platform`** snapshot (**uname**, libc version when available, Python build tags) for diagnosing native wheels / ROCm / toolchain on the API host
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
@@ -130,6 +132,10 @@ legal-api
    - `POST /v1/rag/issue-spotter/stream` — **SSE**: **`sources`** + streaming issue JSON (**extraction** routing)
    - `POST /v1/rag/suggested-questions` — retrieval + JSON **follow-up diligence questions** (**`SUGGESTED_QUESTIONS_JSON_SYSTEM`** / **`suggested_questions_v1`**)
    - `POST /v1/rag/suggested-questions/stream` — **SSE**: **`sources`** + streaming suggested-questions JSON (**extraction** routing)
+   - `POST /v1/rag/deal-thesis` — retrieval + JSON **bull/bear deal thesis** + evidence refs (**`DEAL_THESIS_JSON_SYSTEM`** / **`deal_thesis_v1`**)
+   - `POST /v1/rag/deal-thesis/stream` — **SSE**: **`sources`** + streaming deal-thesis JSON (**extraction** routing)
+   - `POST /v1/rag/bibliography-export` — retrieval + **markdown bibliography / excerpt digest** for counsel review (**`BIBLIOGRAPHY_EXPORT_SYSTEM`**; **`citation_style`** `neutral` \| `deal_memo` \| `compact`; **synthesis** routing)
+   - `POST /v1/rag/bibliography-export/stream` — **SSE**: **`sources`** + bibliography markdown tokens (**synthesis** routing)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`

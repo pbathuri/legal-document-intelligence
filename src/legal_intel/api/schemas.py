@@ -650,3 +650,65 @@ class SuggestedQuestionsResponse(BaseModel):
     suggestions: dict[str, Any]
     sources: list[dict[str, Any]]
     retrieval_top_k: int
+
+
+class DealThesisRequest(BaseModel):
+    """Single-doc retrieval + JSON bull/bear deal thesis (``deal_thesis_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="consideration earn-out escrow indemnity warranty covenant carve-out MAC termination assignment regulatory consent competitive restrictions employees customers suppliers ip litigation title lien debt facilities dividend",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class DealThesisResponse(BaseModel):
+    doc_id: str
+    thesis: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class BibliographyExportRequest(BaseModel):
+    """Single-doc retrieval + markdown bibliography / excerpt digest (specialist synthesis)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="parties definitions obligations representations warranties indemnity consideration termination schedules exhibits",
+        min_length=1,
+        max_length=4000,
+    )
+    instruction: str = Field(
+        default="Format excerpts as a citation-ready bibliography for counsel review.",
+        min_length=1,
+        max_length=12000,
+    )
+    citation_style: Literal["neutral", "deal_memo", "compact"] = "neutral"
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class BibliographyExportResponse(BaseModel):
+    doc_id: str
+    bibliography_markdown: str
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class EmbeddingFarthestPairRequest(BaseModel):
+    """Find the pair of texts with **lowest** cosine similarity (most divergent) among 3–40 strings."""
+
+    texts: list[str] = Field(..., min_length=3, max_length=40)
+
+
+class EmbeddingFarthestPairResponse(BaseModel):
+    index_a: int
+    index_b: int
+    cosine_similarity: float
+    dimension: int
+    text_preview_a: str
+    text_preview_b: str
+    embedding_provider: str
+    ollama_embedding_model: str = ""
+    embedding_model: str = ""

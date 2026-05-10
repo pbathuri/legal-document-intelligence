@@ -328,6 +328,17 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "deal_thesis_v1" in system:
+            return json.dumps(
+                {
+                    "thesis_headline": "[MOCK] Transaction exhibits standard protective covenants with identifiable carve-outs.",
+                    "bull_points": [{"point": "[MOCK] Earn-out mechanics may align incentives.", "evidence_refs": [1]}],
+                    "bear_points": [{"point": "[MOCK] Earn-out disputes possible if metrics contested.", "evidence_refs": [1]}],
+                    "key_dependencies": ["[MOCK] Regulatory approvals if referenced in excerpts."],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real deal thesis.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

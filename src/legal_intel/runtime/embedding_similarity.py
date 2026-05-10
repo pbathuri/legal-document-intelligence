@@ -18,6 +18,41 @@ def cosine_similarity_uvec(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
+def farthest_embedding_pair(texts: list[str]) -> dict[str, Any]:
+    """Among all unordered pairs, return indices with **minimum** cosine similarity (most divergent pair)."""
+    from legal_intel.rag.embeddings import make_embedding_model
+
+    cleaned = [(t or "").strip() for t in texts]
+    if len(cleaned) < 3:
+        raise ValueError("Provide at least three non-empty texts")
+    if any(not x for x in cleaned):
+        raise ValueError("Each text must be non-empty")
+    if len(cleaned) > 40:
+        raise ValueError("At most 40 texts for farthest-pair search")
+    m = make_embedding_model()
+    vecs = m.encode(cleaned)
+    n = len(vecs)
+    dim = len(vecs[0])
+    best_i, best_j = 0, 1
+    best_sim = cosine_similarity_uvec(vecs[0], vecs[1])
+    for i in range(n):
+        for j in range(i + 1, n):
+            sim = cosine_similarity_uvec(vecs[i], vecs[j])
+            if sim < best_sim:
+                best_sim = sim
+                best_i, best_j = i, j
+    pa = cleaned[best_i][:120] + ("…" if len(cleaned[best_i]) > 120 else "")
+    pb = cleaned[best_j][:120] + ("…" if len(cleaned[best_j]) > 120 else "")
+    return {
+        "index_a": best_i,
+        "index_b": best_j,
+        "cosine_similarity": round(float(best_sim), 8),
+        "dimension": dim,
+        "text_preview_a": pa,
+        "text_preview_b": pb,
+    }
+
+
 def rank_candidates_by_query_embedding(*, query: str, candidates: list[str]) -> dict[str, Any]:
     """Encode query + candidates in one batch; return candidates sorted by cosine similarity to query (desc)."""
     from legal_intel.rag.embeddings import make_embedding_model

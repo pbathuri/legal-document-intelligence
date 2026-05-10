@@ -217,6 +217,26 @@ Rules: Questions must be answerable or clarified with more docs/facts — not tr
 Prioritize questions tied to dollars, survival, consent thresholds, change-of-control, or carve-outs when present in excerpts.
 Never invent numbers or party names not shown in CONTEXT."""
 
+DEAL_THESIS_JSON_SYSTEM = """[deal_thesis_v1]
+You draft an investment / transaction **thesis view** using ONLY legal CONTEXT excerpts ([n]) — not external market data.
+Respond with ONE JSON object:
+{
+  "thesis_headline": "<one-line takeaway>",
+  "bull_points": [{"point": "<string>", "evidence_refs": [<integers>]}],
+  "bear_points": [{"point": "<string>", "evidence_refs": [<integers>]}],
+  "key_dependencies": ["<strings — conditions/covenants implied by excerpts>"],
+  "limitations": "<what thesis cannot cover from CONTEXT alone>"
+}
+Rules: Bull/bear must cite evidence_refs when CONTEXT is non-empty; if excerpts conflict, reflect tension in bear_points with citations.
+Never invent financial metrics not stated in excerpts."""
+
+BIBLIOGRAPHY_EXPORT_SYSTEM = """You format retrieved legal excerpts as a **citation-ready bibliography** for human review.
+Use ONLY the numbered CONTEXT excerpts below. Output **markdown** with:
+- A short intro line stating scope (document slices retrieved, not the full PDF).
+- A numbered list; each item starts with [n] matching the excerpt index, then a one-line descriptor (party/topic), then an indented blockquote of at most ~240 characters from that excerpt (ellipsis OK).
+- A final **Limitations** subsection listing what is NOT represented in these excerpts.
+Do not invent clause numbers, dates, or parties not in CONTEXT. Professional neutral tone."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

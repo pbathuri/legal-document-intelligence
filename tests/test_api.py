@@ -1925,3 +1925,99 @@ def test_suggested_questions_stream(api_client):
     )
     assert r.status_code == 200
     assert "sources" in r.text and "done" in r.text
+
+
+def test_deal_thesis(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="dt1",
+        doc_label="spa.pdf",
+        chunks=[("Purchase Price shall be paid fifty percent at Closing and fifty percent subject to earn-out metrics.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/deal-thesis",
+        json={"doc_id": "dt1", "retrieval_query": "earn-out closing consideration"},
+    )
+    assert r.status_code == 200
+    b = r.json()
+    assert b["doc_id"] == "dt1"
+    assert b["thesis"]
+
+
+def test_deal_thesis_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="dts1",
+        doc_label="x.pdf",
+        chunks=[("Seller indemnifies Buyer for breaches of representations for twelve months.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/deal-thesis/stream",
+        json={"doc_id": "dts1", "retrieval_query": "indemnity"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text and "done" in r.text
+
+
+def test_bibliography_export(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="bib1",
+        doc_label="nda.pdf",
+        chunks=[("Recipient shall return or destroy all Confidential Information upon written request.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/bibliography-export",
+        json={"doc_id": "bib1", "retrieval_query": "confidential return destroy"},
+    )
+    assert r.status_code == 200
+    assert r.json()["bibliography_markdown"]
+
+
+def test_bibliography_export_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="bibs1",
+        doc_label="y.pdf",
+        chunks=[("Non-solicitation applies to employees for twenty-four months.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/bibliography-export/stream",
+        json={"doc_id": "bibs1", "retrieval_query": "non-solicitation"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text and "done" in r.text
+
+
+def test_embeddings_farthest_pair(api_client):
+    r = api_client.post(
+        "/v1/embeddings/farthest-pair",
+        json={
+            "texts": [
+                "Indemnity survives closing for environmental liabilities.",
+                "The moon is made of cheese according to folklore.",
+                "Closing shall occur on the third business day after conditions precedent.",
+            ]
+        },
+    )
+    assert r.status_code == 200
+    j = r.json()
+    assert j["index_a"] != j["index_b"]
+    assert "cosine_similarity" in j
+    assert j["dimension"] >= 1
+
+
+def test_runtime_platform_detail(api_client):
+    r = api_client.get("/v1/runtime/platform-detail")
+    assert r.status_code == 200
+    j = r.json()
+    assert j.get("system")
+    assert "python_implementation" in j
