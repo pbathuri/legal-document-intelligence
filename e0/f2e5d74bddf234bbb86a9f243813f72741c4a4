@@ -1,0 +1,40 @@
+src/legal_intel/llm/client.py
+  s_c7571ff3b984be::t_76c9d8167b8369 432-478
+tests/test_api.py
+  s_c7571ff3b984be::t_fca0dd38e47ab2 2188-2262
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_06bfaac42fcb88 855-931
+src/legal_intel/runtime/agent_bootstrap.py
+  s_c7571ff3b984be::t_fe1963a97735cd 36
+  s_c7571ff3b984be::t_26335adf19fe17 22-24
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_23556a4c1abe5a 103-110
+  s_c7571ff3b984be::t_9051fa1958df3c 570-599
+  s_c7571ff3b984be::t_78720c7f125042 3036-3198
+  s_c7571ff3b984be::t_039f10c529d4c3 162-164
+  s_c7571ff3b984be::t_1aff62b5abac75 681
+  s_c7571ff3b984be::t_1d1d5015c7e79f 1222-1243
+src/legal_intel/prompts.py
+  s_c7571ff3b984be::t_b3fa665da392b0 337-386
+README.md
+  s_c7571ff3b984be::t_ed6b88aaa181fe 154-159
+  s_c7571ff3b984be::t_f53804ed5405a7 92
+src/legal_intel/rag/store.py
+  s_c7571ff3b984be::t_b6d1881fdb2bc1 168-222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "e0f2e5d74bddf234bbb86a9f243813f72741c4a4",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
