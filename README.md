@@ -89,6 +89,7 @@ legal-api
    - `POST /v1/embeddings/nearest-to-query` — JSON `{ "query", "candidates": ["...", ...] }` (≤64 candidates) → **ranked** list by cosine similarity to the query embedding (same backend as RAG — useful for local rerank / shortlist)
    - `POST /v1/embeddings/farthest-pair` — JSON `{ "texts": ["...", ...] }` (3–40 strings) → indices + cosine for the pair with **minimum** similarity (**most divergent** excerpts — divergence QA / contrast mining)
    - `POST /v1/embeddings/document-centroid-similarity` — JSON `{ "doc_id_a", "doc_id_b", "max_chunks_per_document" }` → cosine between **mean embeddings** of chunk texts per document (bounded Qdrant scroll — topical similarity / clustering signal without LLM)
+   - `POST /v1/embeddings/document-chunk-stats` — JSON `{ "doc_id", "max_chunks_scanned" }` → **chunk length statistics** from Qdrant (non-empty vs empty chunks, mean/max/min chars; **`truncated_scan`** if more chunks exist — OCR / segmentation QA; **no LLM**)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/runtime/storage` — bounded filesystem inventory: bytes + file counts under **`UPLOAD_STORAGE_DIR`**, **`manifest.jsonl`** size/line estimate, **`RUNS_DB_PATH`** file size (device-local maintenance)
    - `GET /v1/runtime/git` — best-effort **Git** snapshot for the API **`cwd`** (`commit`, `branch`, `dirty` when **`git`** is on **PATH**)
@@ -150,6 +151,12 @@ legal-api
    - `POST /v1/rag/execution-formalities/stream` — **SSE**: **`sources`** + streaming execution JSON (**extraction** routing)
    - `POST /v1/rag/retrieval-expand-plan` — retrieval + **`agent_goal`** + JSON **follow-up vector queries** for agents (**`retrieval_expand_plan_v1`**; **specialist** routing — uses **`LLM_MODEL_SPECIALIST`** / Ollama specialist slot)
    - `POST /v1/rag/retrieval-expand-plan/stream` — **SSE**: **`sources`** + streaming expand-plan JSON (**specialist** routing)
+   - `POST /v1/rag/survival-schedule` — retrieval + JSON **survival-of-obligations schedule** (duration text per topic; **`survival_schedule_v1`**)
+   - `POST /v1/rag/survival-schedule/stream` — **SSE**: **`sources`** + streaming survival JSON (**extraction** routing)
+   - `POST /v1/rag/assignment-coc` — retrieval + JSON **assignment / change-of-control** map (**`assignment_coc_v1`**)
+   - `POST /v1/rag/assignment-coc/stream` — **SSE**: **`sources`** + streaming assignment JSON (**extraction** routing)
+   - `POST /v1/rag/ip-assets-sweep` — retrieval + JSON **IP / software / OSS** sweep (**`ip_assets_sweep_v1`**)
+   - `POST /v1/rag/ip-assets-sweep/stream` — **SSE**: **`sources`** + streaming IP sweep JSON (**extraction** routing)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`

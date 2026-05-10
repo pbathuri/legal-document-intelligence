@@ -852,3 +852,80 @@ class DocumentCentroidSimilarityResponse(BaseModel):
     embedding_provider: str
     ollama_embedding_model: str = ""
     embedding_model: str = ""
+
+
+class SurvivalScheduleRequest(BaseModel):
+    """Single-doc retrieval + JSON survival-of-obligations schedule (``survival_schedule_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="survive survival eighteen months twelve months anniversary Closing representations warranties indemnity covenant confidentiality non-compete non-solicitation tax environmental fundamental baskets disclosed schedules disclosure schedules sunset expiration statute limitations fundamental breach exclusive remedy",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class SurvivalScheduleResponse(BaseModel):
+    doc_id: str
+    survival_schedule: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class AssignmentCoCRequest(BaseModel):
+    """Single-doc retrieval + JSON assignment / change-of-control map (``assignment_coc_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="assignment assign successor affiliate permitted transfer consent prohibit delegation novation merger consolidation sale of assets stock sale change of control MAC MAE lender financing collateral participation prohibited transfers exceptions",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class AssignmentCoCResponse(BaseModel):
+    doc_id: str
+    assignment_map: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class IpAssetsSweepRequest(BaseModel):
+    """Single-doc retrieval + JSON IP / software sweep (``ip_assets_sweep_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="intellectual property patent trademark copyright trade secret proprietary software source code object code SaaS license sublicense domain OSS open source GPL MIT escrow schedule intellectual property schedule proprietary materials derivative works moral rights work made for hire mask work database rights publicity privacy know-how",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class IpAssetsSweepResponse(BaseModel):
+    doc_id: str
+    ip_register: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class DocumentChunkStatsRequest(BaseModel):
+    """Device-local Qdrant chunk statistics for one indexed document (no LLM)."""
+
+    doc_id: str = Field(..., min_length=1)
+    max_chunks_scanned: int = Field(512, ge=1, le=5000)
+
+
+class DocumentChunkStatsResponse(BaseModel):
+    doc_id: str
+    chunk_count_scanned: int
+    nonempty_chunk_count: int
+    empty_chunk_count: int
+    total_characters_nonempty: int
+    mean_chars_nonempty: float | None = None
+    min_chars_nonempty: int | None = None
+    max_chars_nonempty: int | None = None
+    doc_label: str | None = None
+    truncated_scan: bool

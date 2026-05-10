@@ -165,6 +165,61 @@ class LegalVectorStore:
                 break
         return texts[:cap]
 
+    def chunk_text_statistics(self, doc_id: str, *, max_chunks: int = 512) -> dict[str, Any]:
+        """Bounded scroll over indexed chunks: length stats for OCR / pipeline QA (no LLM)."""
+        did = (doc_id or "").strip()
+        if not did:
+            return {
+                "chunk_count_scanned": 0,
+                "nonempty_chunk_count": 0,
+                "empty_chunk_count": 0,
+                "total_characters_nonempty": 0,
+                "mean_chars_nonempty": None,
+                "min_chars_nonempty": None,
+                "max_chars_nonempty": None,
+                "doc_label": None,
+                "truncated_scan": False,
+            }
+        cap = max(1, min(max_chunks, 5000))
+        nonempty_lens: list[int] = []
+        empty_n = 0
+        scanned = 0
+        cursor = None
+        doc_label: str | None = None
+        while scanned < cap:
+            batch = min(128, cap - scanned)
+            rows, cursor = self.scroll_chunks_for_document(did, limit=batch, cursor=cursor)
+            if not rows:
+                break
+            for r in rows:
+                if doc_label is None and r.get("doc_label"):
+                    doc_label = str(r.get("doc_label"))
+                scanned += 1
+                t = (r.get("text") or "").strip()
+                if t:
+                    nonempty_lens.append(len(t))
+                else:
+                    empty_n += 1
+                if scanned >= cap:
+                    break
+            if cursor is None:
+                break
+        truncated = cursor is not None
+        n_sum = len(nonempty_lens)
+        tot = sum(nonempty_lens)
+        mean = round(tot / float(n_sum), 4) if n_sum else None
+        return {
+            "chunk_count_scanned": scanned,
+            "nonempty_chunk_count": n_sum,
+            "empty_chunk_count": empty_n,
+            "total_characters_nonempty": tot,
+            "mean_chars_nonempty": mean,
+            "min_chars_nonempty": min(nonempty_lens) if nonempty_lens else None,
+            "max_chars_nonempty": max(nonempty_lens) if nonempty_lens else None,
+            "doc_label": doc_label,
+            "truncated_scan": truncated,
+        }
+
     def aggregate_indexed_documents(self, *, max_points: int = 4000) -> list[dict[str, Any]]:
         """Distinct doc_id values seen in the collection (bounded scan)."""
         cap = max(50, min(max_points, 50_000))

@@ -100,6 +100,14 @@ from legal_intel.api.schemas import (
     RetrievalExpandPlanResponse,
     DocumentCentroidSimilarityRequest,
     DocumentCentroidSimilarityResponse,
+    SurvivalScheduleRequest,
+    SurvivalScheduleResponse,
+    AssignmentCoCRequest,
+    AssignmentCoCResponse,
+    IpAssetsSweepRequest,
+    IpAssetsSweepResponse,
+    DocumentChunkStatsRequest,
+    DocumentChunkStatsResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -151,6 +159,9 @@ from legal_intel.prompts import (
     CONDITIONS_PRECEDENT_JSON_SYSTEM,
     EXECUTION_FORMALITIES_JSON_SYSTEM,
     RETRIEVAL_EXPAND_PLAN_JSON_SYSTEM,
+    SURVIVAL_SCHEDULE_JSON_SYSTEM,
+    ASSIGNMENT_COC_JSON_SYSTEM,
+    IP_ASSETS_SWEEP_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -556,6 +567,36 @@ def _prepare_retrieval_expand_plan_parts(
     return did, user, _rag_sources_from_hits(hits), lim
 
 
+def _prepare_survival_schedule_parts(
+    body: SurvivalScheduleRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_assignment_coc_parts(
+    body: AssignmentCoCRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_ip_assets_sweep_parts(
+    body: IpAssetsSweepRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -637,7 +678,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.25.0",
+    version="0.26.0",
 )
 
 _origins = _cors_origins()
@@ -1175,6 +1216,28 @@ def embedding_document_centroid_similarity(
         embedding_provider=s.embedding_provider,
         ollama_embedding_model=s.ollama_embedding_model,
         embedding_model=s.embedding_model,
+    )
+
+
+@app.post("/v1/embeddings/document-chunk-stats", response_model=DocumentChunkStatsResponse)
+def embedding_document_chunk_stats(body: DocumentChunkStatsRequest) -> DocumentChunkStatsResponse:
+    """Bounded Qdrant scroll over one ``doc_id`` — chunk length stats for OCR / segmentation QA (no LLM)."""
+    did = body.doc_id.strip()
+    if not did:
+        raise HTTPException(status_code=400, detail="doc_id is required")
+    store = LegalVectorStore()
+    raw = store.chunk_text_statistics(did, max_chunks=int(body.max_chunks_scanned))
+    return DocumentChunkStatsResponse(
+        doc_id=did,
+        chunk_count_scanned=int(raw["chunk_count_scanned"]),
+        nonempty_chunk_count=int(raw["nonempty_chunk_count"]),
+        empty_chunk_count=int(raw["empty_chunk_count"]),
+        total_characters_nonempty=int(raw["total_characters_nonempty"]),
+        mean_chars_nonempty=raw["mean_chars_nonempty"],
+        min_chars_nonempty=raw["min_chars_nonempty"],
+        max_chars_nonempty=raw["max_chars_nonempty"],
+        doc_label=raw["doc_label"],
+        truncated_scan=bool(raw["truncated_scan"]),
     )
 
 
@@ -2961,6 +3024,171 @@ def rag_retrieval_expand_plan_stream(body: RetrievalExpandPlanRequest):
                 temperature=0.12,
                 max_tokens=8192,
                 task="specialist",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/survival-schedule", response_model=SurvivalScheduleResponse)
+def rag_survival_schedule(body: SurvivalScheduleRequest) -> SurvivalScheduleResponse:
+    """Single-doc retrieval + JSON survival schedule (**survival_schedule_v1**)."""
+    did, user, sources, lim = _prepare_survival_schedule_parts(body)
+    raw = chat_complete_json(
+        SURVIVAL_SCHEDULE_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        survival_schedule: dict[str, Any] = json.loads(raw)
+        if not isinstance(survival_schedule, dict):
+            survival_schedule = {"_value": survival_schedule}
+    except Exception:
+        survival_schedule = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return SurvivalScheduleResponse(
+        doc_id=did,
+        survival_schedule=survival_schedule,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/survival-schedule/stream")
+def rag_survival_schedule_stream(body: SurvivalScheduleRequest):
+    """SSE: sources + streaming survival-schedule JSON (**survival_schedule_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_survival_schedule_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                SURVIVAL_SCHEDULE_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/assignment-coc", response_model=AssignmentCoCResponse)
+def rag_assignment_coc(body: AssignmentCoCRequest) -> AssignmentCoCResponse:
+    """Single-doc retrieval + JSON assignment / change-of-control map (**assignment_coc_v1**)."""
+    did, user, sources, lim = _prepare_assignment_coc_parts(body)
+    raw = chat_complete_json(
+        ASSIGNMENT_COC_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        assignment_map: dict[str, Any] = json.loads(raw)
+        if not isinstance(assignment_map, dict):
+            assignment_map = {"_value": assignment_map}
+    except Exception:
+        assignment_map = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return AssignmentCoCResponse(
+        doc_id=did,
+        assignment_map=assignment_map,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/assignment-coc/stream")
+def rag_assignment_coc_stream(body: AssignmentCoCRequest):
+    """SSE: sources + streaming assignment-coc JSON (**assignment_coc_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_assignment_coc_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                ASSIGNMENT_COC_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/ip-assets-sweep", response_model=IpAssetsSweepResponse)
+def rag_ip_assets_sweep(body: IpAssetsSweepRequest) -> IpAssetsSweepResponse:
+    """Single-doc retrieval + JSON IP / software asset sweep (**ip_assets_sweep_v1**)."""
+    did, user, sources, lim = _prepare_ip_assets_sweep_parts(body)
+    raw = chat_complete_json(
+        IP_ASSETS_SWEEP_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        ip_register: dict[str, Any] = json.loads(raw)
+        if not isinstance(ip_register, dict):
+            ip_register = {"_value": ip_register}
+    except Exception:
+        ip_register = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return IpAssetsSweepResponse(
+        doc_id=did,
+        ip_register=ip_register,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/ip-assets-sweep/stream")
+def rag_ip_assets_sweep_stream(body: IpAssetsSweepRequest):
+    """SSE: sources + streaming ip-assets JSON (**ip_assets_sweep_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_ip_assets_sweep_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                IP_ASSETS_SWEEP_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
             ):
                 yield _sse_payload({"event": "token", "text": piece})
             yield _sse_payload({"event": "done"})

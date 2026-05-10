@@ -19,6 +19,9 @@ def gather_agent_bootstrap_pack(*, api_version: str) -> dict[str, Any]:
             "/v1/rag/covenant-matrix",
             "/v1/rag/financial-terms-ledger",
             "/v1/rag/remedies-playbook",
+            "/v1/rag/survival-schedule",
+            "/v1/rag/assignment-coc",
+            "/v1/rag/ip-assets-sweep",
             "/v1/rag/conditions-precedent",
             "/v1/rag/execution-formalities",
             "/v1/rag/issue-spotter",
@@ -30,6 +33,7 @@ def gather_agent_bootstrap_pack(*, api_version: str) -> dict[str, Any]:
             "/v1/embeddings/nearest-to-query",
             "/v1/embeddings/farthest-pair",
             "/v1/embeddings/document-centroid-similarity",
+            "/v1/embeddings/document-chunk-stats",
         ],
     }
     return {

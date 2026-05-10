@@ -429,6 +429,53 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "survival_schedule_v1" in system:
+            return json.dumps(
+                {
+                    "survival_rows": [
+                        {
+                            "topic": "indemnity",
+                            "survival_text_summary": "[MOCK] Indemnity survives per survival schedule.",
+                            "duration_text": "[MOCK] twelve months",
+                            "survival_until_event": None,
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real survival schedule.",
+                    "_mock": True,
+                }
+            )
+        if "assignment_coc_v1" in system:
+            return json.dumps(
+                {
+                    "rows": [
+                        {
+                            "summary": "[MOCK] Assignment requires consent.",
+                            "restriction_type": "consent_required",
+                            "affected_party_hint": "Unknown",
+                            "standard_material_adverse_on_co_c": None,
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real assignment map.",
+                    "_mock": True,
+                }
+            )
+        if "ip_assets_sweep_v1" in system:
+            return json.dumps(
+                {
+                    "assets": [
+                        {
+                            "description": "[MOCK] Illustrative software asset reference.",
+                            "asset_class": "software_code",
+                            "ownership_or_license_hint": "unknown",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real IP sweep.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

@@ -334,6 +334,56 @@ Respond with ONE JSON object:
 }
 Rules: Provide 4–12 queries unless CONTEXT is empty; no duplicate strings."""
 
+SURVIVAL_SCHEDULE_JSON_SYSTEM = """[survival_schedule_v1]
+You extract **post-closing survival language** stated ONLY in CONTEXT ([n]): survival of representations, warranties, covenants, indemnities, confidentiality, non-compete, fees — with **duration / survival periods** when stated.
+Respond with ONE JSON object:
+{
+  "survival_rows": [
+    {
+      "topic": "representations_warranties" | "covenants" | "indemnity" | "confidentiality" | "non_compete" | "fees_costs" | "tax" | "environmental" | "employment_benefits" | "other",
+      "survival_text_summary": "<short>",
+      "duration_text": "<verbatim-ish duration from excerpts — months/years/sunset/closing anniversary — or null>",
+      "survival_until_event": "<null or short — e.g. expiration of tax statute>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<coverage gaps>"
+}
+Rules: Do not invent survival periods not stated. Merge duplicates."""
+
+ASSIGNMENT_COC_JSON_SYSTEM = """[assignment_coc_v1]
+You extract **assignment, transfer, successor, and change-of-control** provisions stated ONLY in CONTEXT ([n]), including lender/participant carve-outs when visible.
+Respond with ONE JSON object:
+{
+  "rows": [
+    {
+      "summary": "<short>",
+      "restriction_type": "prohibit_assignment" | "consent_required" | "permitted_to_affiliates" | "successors_assigns_language" | "change_of_control" | "lender_nda_exception" | "other",
+      "affected_party_hint": "<Buyer/Seller/Target/Shared/Unknown>",
+      "standard_material_adverse_on_co_c": true | false | null,
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<coverage gaps>"
+}
+Rules: Set standard_material_adverse_on_co_c only if excerpts reference MAC/MAE in CoC context; else null."""
+
+IP_ASSETS_SWEEP_JSON_SYSTEM = """[ip_assets_sweep_v1]
+You extract **intellectual property and software** signals stated ONLY in CONTEXT ([n]): patents, trademarks, copyrights, trade secrets, domain names, software, SaaS, license grants, open-source / OSS, escrow/source code.
+Respond with ONE JSON object:
+{
+  "assets": [
+    {
+      "description": "<short>",
+      "asset_class": "patent" | "trademark" | "copyright" | "trade_secret" | "domain" | "software_code" | "license_grant" | "open_source" | "other",
+      "ownership_or_license_hint": "owned" | "licensed_in" | "licensed_out" | "unknown",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<coverage gaps — schedules not in excerpts>"
+}
+Rules: Never invent registration numbers not shown in CONTEXT."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

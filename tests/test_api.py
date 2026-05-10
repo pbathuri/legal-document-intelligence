@@ -2185,3 +2185,78 @@ def test_document_centroid_similarity(api_client):
     j = r.json()
     assert j["chunks_used_a"] >= 1 and j["chunks_used_b"] >= 1
     assert -1.0 <= j["cosine_between_centroids"] <= 1.0
+
+
+def test_survival_schedule(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="sv1",
+        doc_label="spa.pdf",
+        chunks=[("The representations and warranties shall survive until the twelve-month anniversary of Closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/survival-schedule",
+        json={"doc_id": "sv1", "retrieval_query": "representations warranties survive twelve"},
+    )
+    assert r.status_code == 200
+    assert r.json()["survival_schedule"]
+
+
+def test_assignment_coc(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="ac1",
+        doc_label="spa.pdf",
+        chunks=[("Neither party may assign this Agreement without the prior written consent of the other party.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/assignment-coc",
+        json={"doc_id": "ac1", "retrieval_query": "assign consent"},
+    )
+    assert r.status_code == 200
+    assert r.json()["assignment_map"]
+
+
+def test_ip_assets_sweep(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="ip1",
+        doc_label="license.pdf",
+        chunks=[("Seller grants Buyer a non-exclusive license to use the Licensed Software solely for internal business purposes.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/ip-assets-sweep",
+        json={"doc_id": "ip1", "retrieval_query": "software license exclusive"},
+    )
+    assert r.status_code == 200
+    assert r.json()["ip_register"]
+
+
+def test_document_chunk_stats(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="st1",
+        doc_label="stats.pdf",
+        chunks=[
+            ("Short.", {"page_start": 1, "page_end": 1}),
+            ("A somewhat longer chunk for statistics.", {"page_start": 2, "page_end": 2}),
+        ],
+    )
+    r = api_client.post(
+        "/v1/embeddings/document-chunk-stats",
+        json={"doc_id": "st1", "max_chunks_scanned": 64},
+    )
+    assert r.status_code == 200
+    j = r.json()
+    assert j["chunk_count_scanned"] == 2
+    assert j["nonempty_chunk_count"] == 2
+    assert j["total_characters_nonempty"] > 10
+    assert j["truncated_scan"] is False
