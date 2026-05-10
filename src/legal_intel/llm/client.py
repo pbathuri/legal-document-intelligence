@@ -339,6 +339,52 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "covenant_matrix_v1" in system:
+            return json.dumps(
+                {
+                    "rows": [
+                        {
+                            "obligation_summary": "[MOCK] Deliver audited financial statements annually.",
+                            "party_subject": "Unknown",
+                            "polarity": "affirmative",
+                            "topic": "financial_reporting",
+                            "trigger_or_timing": "post-Closing",
+                            "carve_out_hint": None,
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real covenant matrix.",
+                    "_mock": True,
+                }
+            )
+        if "financial_terms_ledger_v1" in system:
+            return json.dumps(
+                {
+                    "entries": [
+                        {
+                            "label": "[MOCK] Indemnity cap",
+                            "amount_or_formula_text": "[MOCK] placeholder numeric reference from excerpts",
+                            "currency_or_unit": "USD",
+                            "context_note": "[MOCK] liability basket",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real financial ledger.",
+                    "_mock": True,
+                }
+            )
+        if "remedies_playbook_v1" in system:
+            return json.dumps(
+                {
+                    "governing_law": [{"text": "[MOCK] Illustrative governing law clause.", "evidence_refs": [1]}],
+                    "forum_selection": [{"text": "[MOCK] Illustrative forum selection.", "evidence_refs": [1]}],
+                    "notice_and_cure": [],
+                    "specific_performance_or_injunction": [],
+                    "fee_shifting_attorneys": [],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real remedies map.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

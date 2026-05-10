@@ -712,3 +712,60 @@ class EmbeddingFarthestPairResponse(BaseModel):
     embedding_provider: str
     ollama_embedding_model: str = ""
     embedding_model: str = ""
+
+
+class CovenantMatrixRequest(BaseModel):
+    """Single-doc retrieval + JSON covenant / obligation matrix (``covenant_matrix_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="affirmative covenant negative covenant shall not material breach cure notice survival non-compete non-solicit confidentiality reporting consent assignment carve-out basket cap escrow earn-out working capital",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class CovenantMatrixResponse(BaseModel):
+    doc_id: str
+    covenant_matrix: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class FinancialTermsLedgerRequest(BaseModel):
+    """Single-doc retrieval + JSON quantitative term ledger (``financial_terms_ledger_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="purchase price consideration escrow holdback earn-out threshold basket cap indemnity liability fees expenses multiple EBITDA working capital adjustment currency USD percent",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class FinancialTermsLedgerResponse(BaseModel):
+    doc_id: str
+    ledger: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class RemediesPlaybookRequest(BaseModel):
+    """Single-doc retrieval + JSON remedies / forum / enforcement map (``remedies_playbook_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="governing law jurisdiction venue arbitration AAA ICC judicial forum injunctive relief specific performance cure notice breach waiver attorneys fees costs prevailing party indemnification exclusive remedy",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class RemediesPlaybookResponse(BaseModel):
+    doc_id: str
+    playbook: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int

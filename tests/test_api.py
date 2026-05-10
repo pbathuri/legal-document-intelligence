@@ -2021,3 +2021,83 @@ def test_runtime_platform_detail(api_client):
     j = r.json()
     assert j.get("system")
     assert "python_implementation" in j
+
+
+def test_runtime_agent_bootstrap(api_client):
+    r = api_client.get("/v1/runtime/agent-bootstrap")
+    assert r.status_code == 200
+    j = r.json()
+    assert j.get("api_version")
+    assert "model_routing" in j and "extraction" in j["model_routing"]
+    assert "preflight" in j and "platform_detail" in j and "device" in j
+    assert "route_hints" in j
+
+
+def test_covenant_matrix(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="cov1",
+        doc_label="cov.pdf",
+        chunks=[("Seller shall not solicit employees of the Target for twelve months following Closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/covenant-matrix",
+        json={"doc_id": "cov1", "retrieval_query": "non-solicit seller"},
+    )
+    assert r.status_code == 200
+    b = r.json()
+    assert b["doc_id"] == "cov1"
+    assert b["covenant_matrix"]
+
+
+def test_financial_terms_ledger(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="fin1",
+        doc_label="spa.pdf",
+        chunks=[("The indemnification obligations shall not exceed ten million United States dollars.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/financial-terms-ledger",
+        json={"doc_id": "fin1", "retrieval_query": "indemnification cap million"},
+    )
+    assert r.status_code == 200
+    assert r.json()["ledger"]
+
+
+def test_remedies_playbook(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="rem1",
+        doc_label="nda.pdf",
+        chunks=[("Any dispute shall be resolved by arbitration in New York under AAA rules.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/remedies-playbook",
+        json={"doc_id": "rem1", "retrieval_query": "arbitration AAA dispute"},
+    )
+    assert r.status_code == 200
+    assert r.json()["playbook"]
+
+
+def test_covenant_matrix_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="covs1",
+        doc_label="x.pdf",
+        chunks=[("Buyer must maintain insurance naming Seller as additional insured.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/covenant-matrix/stream",
+        json={"doc_id": "covs1", "retrieval_query": "insurance"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text and "done" in r.text

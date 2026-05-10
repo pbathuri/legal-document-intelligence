@@ -237,6 +237,55 @@ Use ONLY the numbered CONTEXT excerpts below. Output **markdown** with:
 - A final **Limitations** subsection listing what is NOT represented in these excerpts.
 Do not invent clause numbers, dates, or parties not in CONTEXT. Professional neutral tone."""
 
+COVENANT_MATRIX_JSON_SYSTEM = """[covenant_matrix_v1]
+You extract **obligations and restrictive covenants** stated ONLY in CONTEXT excerpts ([n]).
+Respond with ONE JSON object:
+{
+  "rows": [
+    {
+      "obligation_summary": "<short imperative>",
+      "party_subject": "<who is bound — Buyer/Seller/Target/Recipient/etc or Unknown>",
+      "polarity": "affirmative" | "negative" | "mixed",
+      "topic": "financial_reporting" | "conduct" | "non_compete" | "non_solicit" | "confidentiality" | "compliance" | "notice" | "other",
+      "trigger_or_timing": "<when it applies — Closing / survival months / MAE / upon breach — or null>",
+      "carve_out_hint": "<short if carve-out language appears — else null>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<coverage gaps — angles not visible in CONTEXT>"
+}
+Rules: Do not infer unstated parties; use Unknown when unclear. Merge duplicate obligations. Each row needs evidence_refs when CONTEXT supports it."""
+
+FINANCIAL_TERMS_LEDGER_JSON_SYSTEM = """[financial_terms_ledger_v1]
+You extract **quantitative or formula-like economic terms** stated ONLY in CONTEXT ([n]): caps, baskets, percentages, dollar amounts, multiples, thresholds, escrows, earn-out KPIs, fees.
+Respond with ONE JSON object:
+{
+  "entries": [
+    {
+      "label": "<human label — e.g. indemnity cap, escrow holdback, basket>",
+      "amount_or_formula_text": "<verbatim-ish from excerpts — do not invent>",
+      "currency_or_unit": "<USD / percent / multiple / textual — or null>",
+      "context_note": "<one line — clause topic>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<what figures may be incomplete or omitted from excerpts>"
+}
+Rules: If excerpts omit numbers, omit the row — never fabricate amounts or currencies."""
+
+REMEDIES_PLAYBOOK_JSON_SYSTEM = """[remedies_playbook_v1]
+You summarize **dispute resolution, remedies, forum, and enforcement** using ONLY CONTEXT ([n]).
+Respond with ONE JSON object:
+{
+  "governing_law": [{"text": "<short>", "evidence_refs": [<integers>]}],
+  "forum_selection": [{"text": "<court / arbitration / rules / seat>", "evidence_refs": [<integers>]}],
+  "notice_and_cure": [{"text": "<notice periods / cure windows>", "evidence_refs": [<integers>]}],
+  "specific_performance_or_injunction": [{"text": "<>", "evidence_refs": [<integers>]}],
+  "fee_shifting_attorneys": [{"text": "<>", "evidence_refs": [<integers>]}],
+  "limitations": "<what is not addressed in excerpts>"
+}
+Use empty arrays when a topic is not mentioned. Never cite statutes or cases outside CONTEXT."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

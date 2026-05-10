@@ -98,6 +98,7 @@ legal-api
    - `GET /v1/runtime/sys-path` — bounded **`sys.path`** prefix (`limit` query param, default 64 entries) for interpreter / packaging debugging on the API host
    - `GET /v1/runtime/path-entries` — non-empty segments from the process **`PATH`** env var (`limit` query param, default 80; max 200) — toolchain / shell debugging on the API host
    - `GET /v1/runtime/platform-detail` — stdlib **`platform`** snapshot (**uname**, libc version when available, Python build tags) for diagnosing native wheels / ROCm / toolchain on the API host
+   - `GET /v1/runtime/agent-bootstrap` — **single JSON** for on-device agents: resolved **Ollama / OpenAI-compatible** model routing (**extraction** / **synthesis** / **specialist**), **`gather_preflight()`**, **`platform_detail`**, **`device`**, and route hints (no secrets — aligns local agents with this API before RAG calls)
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
@@ -136,6 +137,12 @@ legal-api
    - `POST /v1/rag/deal-thesis/stream` — **SSE**: **`sources`** + streaming deal-thesis JSON (**extraction** routing)
    - `POST /v1/rag/bibliography-export` — retrieval + **markdown bibliography / excerpt digest** for counsel review (**`BIBLIOGRAPHY_EXPORT_SYSTEM`**; **`citation_style`** `neutral` \| `deal_memo` \| `compact`; **synthesis** routing)
    - `POST /v1/rag/bibliography-export/stream` — **SSE**: **`sources`** + bibliography markdown tokens (**synthesis** routing)
+   - `POST /v1/rag/covenant-matrix` — retrieval + JSON **obligation / covenant matrix** (affirmative vs negative, topics, triggers; **`covenant_matrix_v1`**)
+   - `POST /v1/rag/covenant-matrix/stream` — **SSE**: **`sources`** + streaming covenant-matrix JSON (**extraction** routing)
+   - `POST /v1/rag/financial-terms-ledger` — retrieval + JSON **quantitative term ledger** (amounts, baskets, caps — excerpts only; **`financial_terms_ledger_v1`**)
+   - `POST /v1/rag/financial-terms-ledger/stream` — **SSE**: **`sources`** + streaming ledger JSON (**extraction** routing)
+   - `POST /v1/rag/remedies-playbook` — retrieval + JSON **remedies / forum / fee-shifting map** (**`remedies_playbook_v1`**)
+   - `POST /v1/rag/remedies-playbook/stream` — **SSE**: **`sources`** + streaming remedies JSON (**extraction** routing)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`

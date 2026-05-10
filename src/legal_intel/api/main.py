@@ -86,6 +86,12 @@ from legal_intel.api.schemas import (
     BibliographyExportResponse,
     EmbeddingFarthestPairRequest,
     EmbeddingFarthestPairResponse,
+    CovenantMatrixRequest,
+    CovenantMatrixResponse,
+    FinancialTermsLedgerRequest,
+    FinancialTermsLedgerResponse,
+    RemediesPlaybookRequest,
+    RemediesPlaybookResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -131,6 +137,9 @@ from legal_intel.prompts import (
     SUGGESTED_QUESTIONS_JSON_SYSTEM,
     DEAL_THESIS_JSON_SYSTEM,
     BIBLIOGRAPHY_EXPORT_SYSTEM,
+    COVENANT_MATRIX_JSON_SYSTEM,
+    FINANCIAL_TERMS_LEDGER_JSON_SYSTEM,
+    REMEDIES_PLAYBOOK_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -174,6 +183,7 @@ from legal_intel.runtime.ollama_probe import (
 from legal_intel.runtime.ollama_warnings import build_ollama_model_warnings
 from legal_intel.runtime.ollama_deep import gather_ollama_host_snapshot
 from legal_intel.runtime.ollama_agent_stack import gather_ollama_agent_stack
+from legal_intel.runtime.agent_bootstrap import gather_agent_bootstrap_pack
 from legal_intel.runtime.platform_detail import gather_platform_detail
 from legal_intel.runtime.preflight import gather_preflight
 from legal_intel.runtime.storage_inventory import gather_storage_inventory
@@ -470,6 +480,36 @@ def _prepare_bibliography_export_parts(
     return did, user, _rag_sources_from_hits(hits), lim
 
 
+def _prepare_covenant_matrix_parts(
+    body: CovenantMatrixRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_financial_terms_ledger_parts(
+    body: FinancialTermsLedgerRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_remedies_playbook_parts(
+    body: RemediesPlaybookRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -551,7 +591,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.23.0",
+    version="0.24.0",
 )
 
 _origins = _cors_origins()
@@ -1464,6 +1504,12 @@ def runtime_path_env_entries(limit: int = 80) -> dict[str, Any]:
 def runtime_platform_detail() -> dict[str, Any]:
     """Stdlib **platform** introspection: OS release, machine, Python build, **uname** / **libc** when available."""
     return gather_platform_detail()
+
+
+@app.get("/v1/runtime/agent-bootstrap")
+def runtime_agent_bootstrap() -> dict[str, Any]:
+    """Single JSON for local agents: **Ollama** model routing, **preflight**, **platform**, **device**, route hints."""
+    return gather_agent_bootstrap_pack(api_version=app.version)
 
 
 @app.get("/v1/settings/effective")
@@ -2498,6 +2544,171 @@ def rag_bibliography_export_stream(body: BibliographyExportRequest):
                 temperature=0.08,
                 max_tokens=8192,
                 task="synthesis",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/covenant-matrix", response_model=CovenantMatrixResponse)
+def rag_covenant_matrix(body: CovenantMatrixRequest) -> CovenantMatrixResponse:
+    """Single-doc retrieval + JSON obligation / covenant matrix (**covenant_matrix_v1**)."""
+    did, user, sources, lim = _prepare_covenant_matrix_parts(body)
+    raw = chat_complete_json(
+        COVENANT_MATRIX_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        covenant_matrix: dict[str, Any] = json.loads(raw)
+        if not isinstance(covenant_matrix, dict):
+            covenant_matrix = {"_value": covenant_matrix}
+    except Exception:
+        covenant_matrix = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return CovenantMatrixResponse(
+        doc_id=did,
+        covenant_matrix=covenant_matrix,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/covenant-matrix/stream")
+def rag_covenant_matrix_stream(body: CovenantMatrixRequest):
+    """SSE: sources + streaming covenant-matrix JSON (**covenant_matrix_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_covenant_matrix_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                COVENANT_MATRIX_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/financial-terms-ledger", response_model=FinancialTermsLedgerResponse)
+def rag_financial_terms_ledger(body: FinancialTermsLedgerRequest) -> FinancialTermsLedgerResponse:
+    """Single-doc retrieval + JSON economic / numeric term ledger (**financial_terms_ledger_v1**)."""
+    did, user, sources, lim = _prepare_financial_terms_ledger_parts(body)
+    raw = chat_complete_json(
+        FINANCIAL_TERMS_LEDGER_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        ledger: dict[str, Any] = json.loads(raw)
+        if not isinstance(ledger, dict):
+            ledger = {"_value": ledger}
+    except Exception:
+        ledger = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return FinancialTermsLedgerResponse(
+        doc_id=did,
+        ledger=ledger,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/financial-terms-ledger/stream")
+def rag_financial_terms_ledger_stream(body: FinancialTermsLedgerRequest):
+    """SSE: sources + streaming financial-terms JSON (**financial_terms_ledger_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_financial_terms_ledger_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                FINANCIAL_TERMS_LEDGER_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/remedies-playbook", response_model=RemediesPlaybookResponse)
+def rag_remedies_playbook(body: RemediesPlaybookRequest) -> RemediesPlaybookResponse:
+    """Single-doc retrieval + JSON remedies / forum map (**remedies_playbook_v1**)."""
+    did, user, sources, lim = _prepare_remedies_playbook_parts(body)
+    raw = chat_complete_json(
+        REMEDIES_PLAYBOOK_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        playbook: dict[str, Any] = json.loads(raw)
+        if not isinstance(playbook, dict):
+            playbook = {"_value": playbook}
+    except Exception:
+        playbook = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return RemediesPlaybookResponse(
+        doc_id=did,
+        playbook=playbook,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/remedies-playbook/stream")
+def rag_remedies_playbook_stream(body: RemediesPlaybookRequest):
+    """SSE: sources + streaming remedies-playbook JSON (**remedies_playbook_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_remedies_playbook_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                REMEDIES_PLAYBOOK_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
             ):
                 yield _sse_payload({"event": "token", "text": piece})
             yield _sse_payload({"event": "done"})
