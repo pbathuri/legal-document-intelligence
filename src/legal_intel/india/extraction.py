@@ -62,7 +62,12 @@ def extract_instrument_fact(doc_id: str, doc_label: str, context_text: str) -> I
     if s.llm_json_mode_extraction:
         try:
             raw = chat_complete_json(
-                EXTRACTION_SYSTEM, user, temperature=0.0, max_tokens=2048)
+                EXTRACTION_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=2048,
+                task="extraction",
+            )
             data = _parse_json_loose(raw)
             data["doc_id"] = doc_id
             data["doc_label"] = doc_label
@@ -70,8 +75,13 @@ def extract_instrument_fact(doc_id: str, doc_label: str, context_text: str) -> I
         except Exception:
             pass
 
-    raw = chat_complete(EXTRACTION_SYSTEM, user,
-                        temperature=0.0, max_tokens=2048)
+    raw = chat_complete(
+        EXTRACTION_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=2048,
+        task="extraction",
+    )
     try:
         data = _parse_json_loose(raw)
         data["doc_id"] = doc_id
@@ -83,6 +93,7 @@ def extract_instrument_fact(doc_id: str, doc_label: str, context_text: str) -> I
             user + f"\n\nINVALID_OUTPUT:\n{raw[:4000]}",
             temperature=0.0,
             max_tokens=2048,
+            task="extraction",
         )
         data = _parse_json_loose(raw2)
         data["doc_id"] = doc_id

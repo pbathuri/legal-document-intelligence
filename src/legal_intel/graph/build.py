@@ -6,7 +6,7 @@ from concurrent.futures import TimeoutError as FutureTimeout
 
 from langgraph.graph import END, START, StateGraph
 
-from legal_intel.config import get_settings
+from legal_intel.config import DiligenceDomain, get_settings
 from legal_intel.graph.state import DiligenceState, IndiaDiligenceState
 from legal_intel.india.extraction import extract_instrument_fact
 from legal_intel.india.prompts_india import (
@@ -39,7 +39,7 @@ def _obligation(state: DiligenceState) -> DiligenceState:
     ctx = state.get("retrieved_context", "")
     uq = state.get("user_query", "")
     user = f"USER FOCUS:\n{uq}\n\nCONTEXT EXCERPTS:\n{ctx}"
-    out = chat_complete(OBLIGATION_SYSTEM, user, temperature=0.05)
+    out = chat_complete(OBLIGATION_SYSTEM, user, temperature=0.05, task="specialist")
     return {"obligation_section": out}
 
 
@@ -47,7 +47,7 @@ def _risk(state: DiligenceState) -> DiligenceState:
     ctx = state.get("retrieved_context", "")
     uq = state.get("user_query", "")
     user = f"USER FOCUS:\n{uq}\n\nCONTEXT EXCERPTS:\n{ctx}"
-    out = chat_complete(RISK_SYSTEM, user, temperature=0.05)
+    out = chat_complete(RISK_SYSTEM, user, temperature=0.05, task="specialist")
     return {"risk_section": out}
 
 
@@ -55,7 +55,7 @@ def _cross(state: DiligenceState) -> DiligenceState:
     ctx = state.get("retrieved_context", "")
     uq = state.get("user_query", "")
     user = f"USER FOCUS:\n{uq}\n\nCONTEXT EXCERPTS:\n{ctx}"
-    out = chat_complete(CROSS_REF_SYSTEM, user, temperature=0.05)
+    out = chat_complete(CROSS_REF_SYSTEM, user, temperature=0.05, task="specialist")
     return {"cross_ref_section": out}
 
 
@@ -63,7 +63,7 @@ def _compliance(state: DiligenceState) -> DiligenceState:
     ctx = state.get("retrieved_context", "")
     uq = state.get("user_query", "")
     user = f"USER FOCUS:\n{uq}\n\nCONTEXT EXCERPTS:\n{ctx}"
-    out = chat_complete(COMPLIANCE_SYSTEM, user, temperature=0.05)
+    out = chat_complete(COMPLIANCE_SYSTEM, user, temperature=0.05, task="specialist")
     return {"compliance_section": out}
 
 
@@ -75,7 +75,7 @@ def _synthesize(state: DiligenceState) -> DiligenceState:
         f"## Compliance\n{state.get('compliance_section', '')}\n"
     )
     user = f"ORIGINAL USER REQUEST:\n{state.get('user_query', '')}\n\nSPECIALIST SECTIONS:\n{bundle}"
-    out = chat_complete(SYNTHESIS_SYSTEM, user, temperature=0.1)
+    out = chat_complete(SYNTHESIS_SYSTEM, user, temperature=0.1, task="synthesis")
     return {"final_report": out}
 
 
@@ -182,7 +182,7 @@ def _chain_india(state: IndiaDiligenceState) -> IndiaDiligenceState:
     uq = state.get("user_query", "")
     disputes = state.get("dispute_check_results", "[]")
     user = f"USER FOCUS:\n{uq}\n\nTITLE_GRAPH_JSON:\n{tg}\n\nDISPUTE_CHECK:\n{disputes}\n\nCONTEXT EXCERPTS:\n{ctx}"
-    out = chat_complete(CHAIN_SYSTEM, user, temperature=0.05)
+    out = chat_complete(CHAIN_SYSTEM, user, temperature=0.05, task="specialist")
     return {"chain_section": out}
 
 
@@ -190,7 +190,7 @@ def _encumbrance_india(state: IndiaDiligenceState) -> IndiaDiligenceState:
     ctx = state.get("retrieved_context", "")
     uq = state.get("user_query", "")
     user = f"USER FOCUS:\n{uq}\n\nCONTEXT EXCERPTS:\n{ctx}"
-    out = chat_complete(ENCUMBRANCE_SYSTEM, user, temperature=0.05)
+    out = chat_complete(ENCUMBRANCE_SYSTEM, user, temperature=0.05, task="specialist")
     return {"encumbrance_section": out}
 
 
@@ -198,7 +198,7 @@ def _records_india(state: IndiaDiligenceState) -> IndiaDiligenceState:
     ctx = state.get("retrieved_context", "")
     uq = state.get("user_query", "")
     user = f"USER FOCUS:\n{uq}\n\nCONTEXT EXCERPTS:\n{ctx}"
-    out = chat_complete(RECORDS_SYSTEM, user, temperature=0.05)
+    out = chat_complete(RECORDS_SYSTEM, user, temperature=0.05, task="specialist")
     return {"records_section": out}
 
 
@@ -227,7 +227,7 @@ def _synthesize_india(state: IndiaDiligenceState) -> IndiaDiligenceState:
         f"DISPUTE_CHECK_RESULTS:\n{state.get('dispute_check_results', '[]')}\n\n"
         f"SPECIALIST SECTIONS:\n{bundle}"
     )
-    out = chat_complete(SYNTHESIS_INDIA_SYSTEM, user, temperature=0.1)
+    out = chat_complete(SYNTHESIS_INDIA_SYSTEM, user, temperature=0.1, task="synthesis")
     return {"final_report": out}
 
 
@@ -259,4 +259,17 @@ def run_diligence_auto(user_query: str, doc_ids: list[str] | None = None, doc_la
     s = get_settings()
     if s.diligence_domain == "india_re":
         return run_diligence_india(user_query, doc_ids or [], doc_labels)
+    return run_diligence(user_query)
+
+
+def run_diligence_for_domain(
+    user_query: str,
+    *,
+    domain: DiligenceDomain,
+    doc_ids: list[str] | None = None,
+    doc_labels: dict[str, str] | None = None,
+) -> DiligenceState | IndiaDiligenceState:
+    """Run diligence without mutating global settings (HTTP API friendly)."""
+    if domain == "india_re":
+        return run_diligence_india(user_query, doc_ids or [], doc_labels or {})
     return run_diligence(user_query)

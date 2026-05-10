@@ -35,6 +35,10 @@ dependencies = [
     "tenacity>=8.2.0",
     "tqdm>=4.66.0",
     "orjson>=3.10.0",
+    # --- HTTP API ---
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -72,6 +76,7 @@ legal-diligence = "legal_intel.cli:main"
 legal-scrape = "legal_intel.scraper.cli:main"
 legal-scrape-bulk = "legal_intel.scraper.bulk_cli:main"
 legal-train-prep = "legal_intel.training.prepare:main"
+legal-api = "legal_intel.api.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

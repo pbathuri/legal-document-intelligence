@@ -27,6 +27,11 @@ Combine the specialist sections into one coherent report: Executive summary, Key
 Cross-document notes, Compliance notes, Recommended next steps (including human review items).
 Attribute conclusions to "provided excerpts" only. Professional tone, concise."""
 
+QUERY_SYSTEM = """You answer questions about legal documents using ONLY the CONTEXT excerpts below.
+Output markdown with: Direct answer, Supporting excerpts (quote short passages with [n] reference ids),
+and Limitations (what is not stated in CONTEXT). If CONTEXT is empty or irrelevant, say so clearly.
+Never invent statute numbers, case names, or clauses not present in CONTEXT."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

@@ -14,7 +14,7 @@ Two modes:
 ```bash
 cd AMD_Hackathon
 pip install -e ".[dev]"
-LEGAL_INTEL_MOCK_LLM=1 QDRANT_URL=:memory: pytest -q   # 21 tests pass
+LEGAL_INTEL_MOCK_LLM=1 QDRANT_URL=:memory: pytest -q
 LEGAL_INTEL_MOCK_LLM=1 QDRANT_URL=:memory: streamlit run streamlit_app.py
 ```
 
@@ -49,6 +49,47 @@ streamlit run streamlit_app.py
 ```
 
 In the UI, choose **India property** or **M&A** in the sidebar. For India, read the **red disclaimer**: registration and digitized records are **evidence**, not a guaranteed title; outputs are **not legal advice**.
+
+## HTTP API (FastAPI) + hybrid frontend (Vercel)
+
+The interactive dashboard at repo root (`index.html`) is designed for **static hosting** (e.g. Vercel). LLMs, embeddings, and Qdrant run on a **separate Python host** — not inside Vercel serverless.
+
+1. Install and run the API:
+
+```bash
+pip install -e ".[dev]"
+export LEGAL_INTEL_MOCK_LLM=1          # or 0 + configure LLM below
+export QDRANT_URL=:memory:             # or http://localhost:6333 with docker compose up -d
+legal-api
+# → http://127.0.0.1:8080  (override with LEGAL_INTEL_API_PORT)
+```
+
+2. Endpoints:
+   - `GET /health` — mock/live LLM flag, Qdrant URL, resolved multimodel names
+   - `POST /v1/ingest` — multipart PDF upload → `{ doc_id, doc_label, chunks }`
+   - `POST /v1/analyze` — JSON `{ query, domain: india_re|mna, doc_ids, doc_labels }` → full diligence state
+   - `POST /v1/query` — JSON `{ question, doc_id? }` — grounded Q&A over indexed chunks
+
+3. Point the **API base URL** in `index.html` (saved in browser localStorage) at your running server. Set `LEGAL_INTEL_CORS_ORIGINS` on the API if you restrict origins (default allows `*`).
+
+### Ollama (multimodel)
+
+Ollama exposes an OpenAI-compatible HTTP API. Example:
+
+```bash
+ollama pull llama3.2
+export LLM_PROVIDER=ollama
+export OLLAMA_BASE_URL=http://localhost:11434/v1
+export LLM_MODEL=llama3.2
+# Optional per-task models (fallback: LLM_MODEL)
+export LLM_MODEL_EXTRACTION=llama3.2
+export LLM_MODEL_SPECIALIST=llama3.2
+export LLM_MODEL_SYNTHESIS=llama3.2
+export LEGAL_INTEL_MOCK_LLM=0
+legal-api
+```
+
+Environment names map to `llm_provider`, `ollama_base_url`, `llm_model_*` in [`src/legal_intel/config.py`](src/legal_intel/config.py) (`LLM_PROVIDER`, `OLLAMA_BASE_URL`, etc.).
 
 ## Production-shaped stack (MI300X + vLLM)
 
@@ -95,7 +136,9 @@ legal-diligence deed1.pdf deed2.pdf -q "Title chain and EC risk" --domain india_
 
 - `src/legal_intel/` — core library; `legal_intel/india/` — schemas, TitleGraph, India prompts, extraction.
 - `src/legal_intel/privacy.py` — optional redaction helper.
-- `streamlit_app.py` — demo UI.
+- `streamlit_app.py` — demo UI (optional).
+- `index.html` — static dashboard for hybrid deploy (Vercel + FastAPI backend).
+- `src/legal_intel/api/` — FastAPI application.
 - `scripts/eval_india.py` — offline scoring helper.
 - `docker-compose.yml` — Qdrant only.
 

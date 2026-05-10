@@ -6,6 +6,8 @@ from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DiligenceDomain = Literal["mna", "india_re"]
+LlmProvider = Literal["openai_compatible", "ollama"]
+LlmTaskKind = Literal["extraction", "specialist", "synthesis"]
 ChunkingMode = Literal["fixed", "structural"]
 OcrBackend = Literal["tesseract", "paddle"]
 
@@ -15,9 +17,15 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
     # LLM
+    llm_provider: LlmProvider = "openai_compatible"
+    """Use `ollama` with `ollama_base_url` (OpenAI-compatible prefix, e.g. http://localhost:11434/v1)."""
     openai_api_base: str = "http://localhost:8000/v1"
     openai_api_key: str = "EMPTY"
     llm_model: str = "meta-llama/Llama-3.1-70B-Instruct"
+    ollama_base_url: str = "http://localhost:11434/v1"
+    llm_model_extraction: str = ""
+    llm_model_specialist: str = ""
+    llm_model_synthesis: str = ""
     legal_intel_mock_llm: bool = False
     llm_redact_pii: bool = True
     llm_json_mode_extraction: bool = True

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Legal Document Intelligence</title>
+  <meta name="description"
+    content="Agentic legal diligence — India property & M&A. Connect your FastAPI backend (Ollama / vLLM) for full analysis." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap"
+    rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #141922;
+      --border: #252d3a;
+      --text: #e8ecf4;
+      --muted: #8b97ab;
+      --accent: #6ee7b7;
+      --accent-dim: #34d39944;
+      --danger: #f87171;
+      --warn-bg: #422006;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(ellipse 120% 80% at 50% -20%, #1a2840 0%, var(--bg) 55%);
+      color: var(--text);
+      font-family: "DM Sans", system-ui, sans-serif;
+      line-height: 1.55;
+    }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+
+    h1 {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: clamp(1.75rem, 4vw, 2.35rem);
+      font-weight: 400;
+      margin: 0 0 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .sub {
+      color: var(--muted);
+      margin: 0 0 1.75rem;
+      font-size: 1.05rem;
+    }
+
+    .grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    @media (min-width: 720px) {
+      .grid-2 {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.35rem;
+    }
+
+    .card h2 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin: 0 0 0.85rem;
+      font-weight: 600;
+    }
+
+    label {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+
+    input[type="text"],
+    input[type="url"],
+    textarea {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0a0d12;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.95rem;
+    }
+
+    textarea {
+      min-height: 88px;
+      resize: vertical;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: center;
+    }
+
+    button {
+      cursor: pointer;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.92rem;
+      padding: 0.55rem 1rem;
+      border: 1px solid var(--border);
+      background: #ffffff0d;
+      color: var(--text);
+      font-family: inherit;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #052e22;
+      border-color: transparent;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .pill {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .pill.bad {
+      border-color: #7f1d1d;
+      color: var(--danger);
+    }
+
+    .pill.ok {
+      border-color: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .tabs button {
+      flex: 1;
+      min-width: 140px;
+    }
+
+    .tabs button.active {
+      border-color: var(--accent);
+      background: #34d39922;
+    }
+
+    .banner-warn {
+      background: var(--warn-bg);
+      border: 1px solid #92400e;
+      color: #fed7aa;
+      padding: 0.85rem 1rem;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    .doc-list {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin: 0;
+      padding-left: 1.1rem;
+    }
+
+    .doc-list li {
+      margin: 0.35rem 0;
+    }
+
+    code {
+      font-family: ui-monospace, monospace;
+      font-size: 0.82em;
+      background: #0a0c10;
+      padding: 0.12rem 0.35rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .report {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.92rem;
+      line-height: 1.65;
+      margin: 0;
+    }
+
+    .sources {
+      font-size: 0.85rem;
+      color: var(--muted);
+      max-height: 240px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      background: #0a0d12;
+    }
+
+    .err {
+      color: var(--danger);
+      font-size: 0.88rem;
+      margin-top: 0.5rem;
+    }
+
+    .footer-note {
+      margin-top: 2.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    a {
+      color: var(--accent);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <span class="pill">Agentic RAG · LangGraph · Qdrant</span>
+    <h1>Legal Document Intelligence</h1>
+    <p class="sub">Upload PDFs to your <strong>FastAPI</strong> backend, run India property or M&amp;A diligence, or ask
+      grounded questions. Configure your API URL below (production backend + local Ollama).</p>
+
+    <div class="card">
+      <h2>Backend connection</h2>
+      <label for="apiBase">API base URL (no trailing slash)</label>
+      <div class="row">
+        <input type="url" id="apiBase" placeholder="http://127.0.0.1:8080"
+          style="flex:1; min-width:220px;" autocomplete="off" />
+        <button type="button" id="btnSaveBase">Save</button>
+        <button type="button" id="btnHealth">Check health</button>
+        <span id="healthPill" class="pill bad">Unknown</span>
+      </div>
+      <p class="footer-note" style="margin-top:0.85rem;border:none;padding:0;">
+        Example: run <code>legal-api</code> or <code>uvicorn legal_intel.api.main:app --host 0.0.0.0 --port 8080</code>.
+        Set <code>LEGAL_INTEL_CORS_ORIGINS</code> on the server if needed.
+      </p>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button type="button" class="active" id="tabIndia" data-domain="india_re">India property</button>
+      <button type="button" id="tabMna" data-domain="mna">M&amp;A contracts</button>
+    </div>
+
+    <div id="indiaDisclaimer" class="banner-warn">
+      <strong>Disclaimer:</strong> India uses presumptive titling — registration is evidence, not guaranteed title.
+      Outputs are assistive only and <strong>not legal advice</strong>. Verify with qualified counsel.
+    </div>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <h2>1 · Upload PDFs</h2>
+        <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple />
+        <p style="font-size:0.85rem;color:var(--muted);margin:0.6rem 0 0;">Files are sent to <code>POST /v1/ingest</code>
+          on your backend.</p>
+        <ul class="doc-list" id="docList"></ul>
+        <div class="err" id="ingestErr"></div>
+      </div>
+      <div class="card">
+        <h2>2 · Diligence run</h2>
+        <label for="diligenceQuery">Question / instruction</label>
+        <textarea id="diligenceQuery"
+          placeholder="e.g. Analyze title chain, EC risk, and encumbrance signals."></textarea>
+        <div class="row" style="margin-top:0.65rem;">
+          <button type="button" class="primary" id="btnAnalyze">Run diligence</button>
+        </div>
+        <div class="err" id="analyzeErr"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>3 · Memo &amp; structured output</h2>
+      <p id="reportEmpty" style="color:var(--muted);margin:0;">Run diligence to see the memo here.</p>
+      <pre class="report" id="reportOut" style="display:none;"></pre>
+      <div class="row" style="margin-top:0.75rem;">
+        <button type="button" id="btnDownloadJson" style="display:none;">Download full JSON</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>Quick Q&amp;A (grounded)</h2>
+      <label for="qaQ">Question</label>
+      <input type="text" id="qaQ" placeholder="Ask a question about indexed documents…" />
+      <label for="qaDoc" style="margin-top:0.65rem;">Scope to doc id (optional)</label>
+      <input type="text" id="qaDoc" placeholder="Leave blank to search all indexed chunks" />
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnQuery">Ask</button>
+      </div>
+      <div class="err" id="queryErr"></div>
+      <h3 style="font-size:0.85rem;color:var(--muted);margin:1rem 0 0.35rem;">Answer</h3>
+      <pre class="report" id="qaAnswer" style="display:none;"></pre>
+      <h3 style="font-size:0.85rem;color:var(--muted);margin:1rem 0 0.35rem;">Sources</h3>
+      <div class="sources" id="qaSources" style="display:none;"></div>
+    </div>
+
+    <p class="footer-note">
+      Open-source stack: <a href="https://github.com/pbathuri/legal-document-intelligence" target="_blank"
+        rel="noopener">GitHub</a>.
+      Frontend is static on Vercel; LLM inference runs on your machine or GPU host via Ollama / vLLM.
+    </p>
+  </div>
+
+  <script>
+    const LS_KEY = "legal_intel_api_base";
+    let activeDomain = "india_re";
+    let indexedDocs = [];
+    let lastResult = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function apiUrl(path) {
+      let base = ($("apiBase").value || "").trim().replace(/\/$/, "");
+      if (!base) throw new Error("Set API base URL (your FastAPI server).");
+      return base + path;
+    }
+
+    async function fetchJson(path, opts = {}) {
+      const res = await fetch(apiUrl(path), {
+        ...opts,
+        headers: { ...(opts.headers || {}), "Accept": "application/json" },
+      });
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = { raw: text };
+      }
+      if (!res.ok) {
+        const detail = data?.detail || data?.message || text || res.statusText;
+        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      }
+      return data;
+    }
+
+    function renderDocs() {
+      const ul = $("docList");
+      ul.innerHTML = "";
+      indexedDocs.forEach((d) => {
+        const li = document.createElement("li");
+        li.innerHTML = `<strong>${escapeHtml(d.doc_label)}</strong> → <code>${escapeHtml(d.doc_id)}</code> (${d.chunks} chunks)`;
+        ul.appendChild(li);
+      });
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement("div");
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function setHealth(ok, msg) {
+      const el = $("healthPill");
+      el.textContent = msg;
+      el.className = "pill " + (ok ? "ok" : "bad");
+    }
+
+    $("btnSaveBase").onclick = () => {
+      localStorage.setItem(LS_KEY, $("apiBase").value.trim());
+      alert("Saved API base to this browser.");
+    };
+
+    $("btnHealth").onclick = async () => {
+      try {
+        const h = await fetchJson("/health");
+        setHealth(true, h.mock_llm ? "OK · mock LLM" : "OK · live LLM");
+      } catch (e) {
+        setHealth(false, "Offline");
+        alert(e.message || String(e));
+      }
+    };
+
+    $("tabIndia").onclick = () => setTab("india_re");
+    $("tabMna").onclick = () => setTab("mna");
+
+    function setTab(domain) {
+      activeDomain = domain;
+      $("tabIndia").classList.toggle("active", domain === "india_re");
+      $("tabMna").classList.toggle("active", domain === "mna");
+      $("indiaDisclaimer").style.display = domain === "india_re" ? "block" : "none";
+    }
+
+    $("fileInput").onchange = async (ev) => {
+      $("ingestErr").textContent = "";
+      const files = ev.target.files;
+      if (!files?.length) return;
+      for (const file of files) {
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          const data = await fetch(apiUrl("/v1/ingest"), { method: "POST", body: fd });
+          const text = await data.text();
+          const json = JSON.parse(text);
+          if (!data.ok) throw new Error(json.detail || text);
+          indexedDocs.push({
+            doc_id: json.doc_id,
+            doc_label: json.doc_label,
+            chunks: json.chunks,
+          });
+        } catch (e) {
+          $("ingestErr").textContent = e.message || String(e);
+          break;
+        }
+      }
+      renderDocs();
+      ev.target.value = "";
+    };
+
+    $("btnAnalyze").onclick = async () => {
+      $("analyzeErr").textContent = "";
+      $("reportEmpty").style.display = "block";
+      $("reportOut").style.display = "none";
+      $("btnDownloadJson").style.display = "none";
+      try {
+        const doc_ids = indexedDocs.map((d) => d.doc_id);
+        const doc_labels = {};
+        indexedDocs.forEach((d) => { doc_labels[d.doc_id] = d.doc_label; });
+        const body = {
+          query: $("diligenceQuery").value.trim() || "Summarize obligations and risks.",
+          domain: activeDomain,
+          doc_ids,
+          doc_labels,
+        };
+        if (activeDomain === "india_re" && doc_ids.length === 0) {
+          throw new Error("Upload at least one PDF for India property mode.");
+        }
+        const out = await fetchJson("/v1/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        lastResult = out.result;
+        const report = out.result?.final_report || "(No final_report in response)";
+        $("reportEmpty").style.display = "none";
+        $("reportOut").style.display = "block";
+        $("reportOut").textContent = report;
+        $("btnDownloadJson").style.display = "inline-block";
+      } catch (e) {
+        $("analyzeErr").textContent = e.message || String(e);
+      }
+    };
+
+    $("btnDownloadJson").onclick = () => {
+      if (!lastResult) return;
+      const blob = new Blob([JSON.stringify(lastResult, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "diligence_output.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+
+    $("btnQuery").onclick = async () => {
+      $("queryErr").textContent = "";
+      $("qaAnswer").style.display = "none";
+      $("qaSources").style.display = "none";
+      try {
+        const body = {
+          question: $("qaQ").value.trim(),
+          doc_id: $("qaDoc").value.trim() || null,
+        };
+        if (!body.question) throw new Error("Enter a question.");
+        const out = await fetchJson("/v1/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        $("qaAnswer").style.display = "block";
+        $("qaAnswer").textContent = out.answer;
+        $("qaSources").style.display = "block";
+        $("qaSources").textContent = JSON.stringify(out.sources, null, 2);
+      } catch (e) {
+        $("queryErr").textContent = e.message || String(e);
+      }
+    };
+
+    (function init() {
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved) $("apiBase").value = saved;
+      setTab("india_re");
+    })();
+  </script>
+</body>
+
+</html>
