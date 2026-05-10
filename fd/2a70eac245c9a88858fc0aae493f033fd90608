@@ -1,0 +1,57 @@
+src/legal_intel/runtime/uploads_scan.py
+  s_c7571ff3b984be::t_7c35dbbed5e644 1-53
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_6074d2de4de759 23-24,45-46
+  s_c7571ff3b984be::t_08fc50776646cf 87,90
+  s_c7571ff3b984be::t_08e4112146b35f 236
+  s_c7571ff3b984be::t_9d82140e0c92a7 521-533
+  s_c7571ff3b984be::t_caac3f4bf9c9fd 64
+  s_c7571ff3b984be::t_a9b7264a1ce759 664-677
+  s_c7571ff3b984be::t_d85f6d46b1c6d1 68-73
+  s_c7571ff3b984be::t_f4c21089704f04 1073-1111
+  s_c7571ff3b984be::t_4b6f85fc2ca841 1202-1224
+  s_c7571ff3b984be::t_35e93d7a214cca 977-986
+index.html
+  s_c7571ff3b984be::t_8ba6c2c5ea186d 449-466
+  s_c7571ff3b984be::t_1f878df422f86c 400
+  s_c7571ff3b984be::t_d576d54ea5fd3b 1334-1359
+  s_c7571ff3b984be::t_945f12e8530157 1387-1409
+  s_c7571ff3b984be::t_3ae227b712d54a 299
+  s_c7571ff3b984be::t_dd9247efabd459 967-987
+  s_c7571ff3b984be::t_de305d8966c952 873-881
+  s_c7571ff3b984be::t_8aafc569cc1f3f 295
+  s_c7571ff3b984be::t_9589125fe06a7a 836-844
+  s_c7571ff3b984be::t_170b1ae0aeb514 309
+src/legal_intel/runtime/ollama_ps_proxy.py
+  s_c7571ff3b984be::t_daad586b1073f4 1-28
+src/legal_intel/prompts.py
+  s_c7571ff3b984be::t_8d99be7f7889b7 40-44
+src/legal_intel/persistence/runs.py
+  s_c7571ff3b984be::t_849065f3bf83fc 136-153
+tests/test_api.py
+  s_c7571ff3b984be::t_a3dd386eca870f 927-974,976-1076
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_2f973f314937fc 224-267
+README.md
+  s_c7571ff3b984be::t_ec576d720c655e 115
+  s_c7571ff3b984be::t_2ad283e12faddc 99
+  s_c7571ff3b984be::t_fb64f2a2fe3fa4 107
+  s_c7571ff3b984be::t_970a9dd8ba1277 78
+  s_c7571ff3b984be::t_4af0769dabbb09 97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "fd2a70eac245c9a88858fc0aae493f033fd90608",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
