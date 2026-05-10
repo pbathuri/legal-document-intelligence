@@ -252,6 +252,37 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "contradictions_scan_v1" in system:
+            return json.dumps(
+                {
+                    "tensions": [
+                        {
+                            "summary": "[MOCK] Illustrative cross-document tension.",
+                            "severity": "informational",
+                            "topic": "[MOCK] Illustrative topic",
+                            "evidence_refs": [1, 2],
+                        }
+                    ],
+                    "aligned_points": [{"summary": "[MOCK] Overlap placeholder.", "evidence_refs": [1]}],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real contradiction scan.",
+                    "_mock": True,
+                }
+            )
+        if "document_outline_v1" in system:
+            return json.dumps(
+                {
+                    "sections": [
+                        {
+                            "heading": "[MOCK] Indemnification",
+                            "summary_line": "[MOCK] Survival and scope of indemnity obligations.",
+                            "confidence": "medium",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real outline.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

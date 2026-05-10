@@ -92,6 +92,7 @@ legal-api
    - `GET /v1/runtime/host-metrics` — extended **psutil** snapshot: CPU sample, RAM/swap %, disk usage of **`cwd`**, boot time, bounded disk partition list (optional dependency)
    - `GET /v1/runtime/network` — hostname/FQDN + per-interface IPv4/IPv6 addresses (**psutil**); aggregate **`net_io_counters`** when available
    - `GET /v1/runtime/local-path-allowlist` — inspect **`LEGAL_INTEL_ALLOW_LOCAL_PATHS`** prefixes (exists, resolved path, **`disk_usage`** free/total per prefix root)
+   - `GET /v1/runtime/rlimits` — Unix **`resource.getrlimit`** snapshot (**NOFILE**, stack, AS, …); Windows returns a short **note** instead of limits
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
@@ -109,12 +110,15 @@ legal-api
    - `POST /v1/rag/compare-documents/stream` — **SSE**: **`sources`** for both sides + specialist comparison tokens + **`done`**
    - `POST /v1/rag/cross-document-summary` — retrieval from **2–12** distinct **`doc_id`** values (shared **`retrieval_query`**) + one **synthesis** memo across labeled excerpts (**`CROSS_DOCUMENT_SUMMARIZE_SYSTEM`**); returns **`sources_by_doc_id`**
    - `POST /v1/rag/cross-document-summary/stream` — **SSE**: **`sources_by_doc_id`** event + synthesis token stream + **`done`**
+   - `POST /v1/rag/cross-document-contradictions` — same multi-doc retrieval as cross-summary (defaults tuned for tension mining) + JSON **`tensions`** / **`aligned_points`** (**`CONTRADICTIONS_JSON_SYSTEM`** / **`contradictions_scan_v1`**)
    - `POST /v1/rag/structured-extract` — retrieval + **`json_object`** extraction for caller-defined **`categories`** keys + **`evidence_refs`** (**`STRUCTURED_EXTRACT_SYSTEM`**; extraction-task routing)
    - `POST /v1/rag/timeline-extract` — retrieval + JSON **timeline** (`events` with **`date_text`**, **`evidence_refs`** ↔ **`[n]`**; **`TIMELINE_JSON_SYSTEM`** / **`timeline_extract_v1`**)
    - `POST /v1/rag/timeline-extract/stream` — **SSE**: **`sources`** event + token stream of JSON timeline text (**extraction** routing)
    - `POST /v1/rag/risk-scan` — retrieval + JSON **risk register** (`risks[]` with **`severity`**, **`evidence_refs`**; **`RISK_SCAN_JSON_SYSTEM`** / **`risk_scan_v1`**)
    - `POST /v1/rag/risk-scan/stream` — **SSE**: **`sources`** + streaming JSON risk text (**extraction** routing)
    - `POST /v1/rag/glossary-extract` — retrieval + JSON **glossary** (`terms[]` + **`evidence_refs`**; **`GLOSSARY_JSON_SYSTEM`** / **`glossary_extract_v1`**)
+   - `POST /v1/rag/glossary-extract/stream` — **SSE**: **`sources`** + streaming glossary JSON (**extraction** routing)
+   - `POST /v1/rag/document-outline` — retrieval + JSON **outline** (`sections[]` + **`evidence_refs`**; **`DOCUMENT_OUTLINE_JSON_SYSTEM`** / **`document_outline_v1`**)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`

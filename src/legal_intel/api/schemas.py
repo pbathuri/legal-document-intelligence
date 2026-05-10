@@ -342,6 +342,28 @@ class CrossDocumentSummaryResponse(BaseModel):
     retrieval_top_k_per_document: int
 
 
+class ContradictionsScanRequest(CrossDocumentSummaryRequest):
+    """Same multi-doc retrieval as cross-summary; defaults tuned for structured tension mining."""
+
+    retrieval_query: str = Field(
+        default="representations warranties indemnity survival disclosure carve-out fundamental breach governing law consideration",
+        min_length=1,
+        max_length=4000,
+    )
+    instruction: str = Field(
+        default="Identify structured cross-document tensions, inconsistencies, or materially ambiguous alignments; cite only [n] excerpt indices.",
+        min_length=1,
+        max_length=12000,
+    )
+
+
+class ContradictionsScanResponse(BaseModel):
+    doc_ids: list[str]
+    contradictions: dict[str, Any]
+    sources_by_doc_id: dict[str, list[dict[str, Any]]]
+    retrieval_top_k_per_document: int
+
+
 class QueryCitationsResponse(BaseModel):
     """Grounded answer with JSON citation objects + flattened markdown answer."""
 
@@ -511,6 +533,25 @@ class GlossaryExtractRequest(BaseModel):
 class GlossaryExtractResponse(BaseModel):
     doc_id: str
     glossary: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class DocumentOutlineRequest(BaseModel):
+    """Single-doc retrieval + JSON outline / section map (``document_outline_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="article section exhibit schedule appendix heading title preamble definitions indemnification termination",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class DocumentOutlineResponse(BaseModel):
+    doc_id: str
+    outline: dict[str, Any]
     sources: list[dict[str, Any]]
     retrieval_top_k: int
 

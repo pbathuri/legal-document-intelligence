@@ -24,6 +24,8 @@ from legal_intel.api.schemas import (
     CompareDocumentsResponse,
     CrossDocumentSummaryRequest,
     CrossDocumentSummaryResponse,
+    ContradictionsScanRequest,
+    ContradictionsScanResponse,
     DocumentPurgeBatchRequest,
     DocumentSummaryRequest,
     DocumentSummaryResponse,
@@ -65,6 +67,8 @@ from legal_intel.api.schemas import (
     RiskScanResponse,
     GlossaryExtractRequest,
     GlossaryExtractResponse,
+    DocumentOutlineRequest,
+    DocumentOutlineResponse,
     EmbeddingCentroidRequest,
     EmbeddingCentroidResponse,
     EmbeddingPairwiseMatrixRequest,
@@ -105,6 +109,8 @@ from legal_intel.prompts import (
     HYDE_HYPOTHETICAL_DOC_SYSTEM,
     RISK_SCAN_JSON_SYSTEM,
     GLOSSARY_JSON_SYSTEM,
+    CONTRADICTIONS_JSON_SYSTEM,
+    DOCUMENT_OUTLINE_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -127,6 +133,7 @@ from legal_intel.runtime.embedding_similarity import (
 from legal_intel.runtime.host_metrics import gather_extended_host_metrics
 from legal_intel.runtime.local_allowlist_inventory import gather_local_allowlist_inventory
 from legal_intel.runtime.network_snapshot import gather_network_snapshot
+from legal_intel.runtime.rlimits_snapshot import gather_rlimits_snapshot
 from legal_intel.runtime.ollama_embed_raw_proxy import ollama_native_embed_raw
 from legal_intel.runtime.process_info import gather_api_process_snapshot
 from legal_intel.runtime.ollama_chat_proxy import ollama_native_chat
@@ -261,14 +268,18 @@ def _prepare_compare_documents_parts(
     return da, db, user, _rag_sources_from_hits(hits_a), _rag_sources_from_hits(hits_b), per
 
 
-def _prepare_cross_document_summary_parts(
-    body: CrossDocumentSummaryRequest,
+def _prepare_multi_document_instruction_context(
+    *,
+    doc_ids: list[str],
+    retrieval_query: str,
+    instruction: str,
+    limit_per_document: int | None,
 ) -> tuple[list[str], str, dict[str, list[dict[str, Any]]], int]:
     store = LegalVectorStore()
     s = get_settings()
-    rq = body.retrieval_query.strip()
+    rq = retrieval_query.strip()
     ordered: list[str] = []
-    for raw in body.doc_ids:
+    for raw in doc_ids:
         d = (raw or "").strip()
         if not d:
             raise HTTPException(status_code=400, detail="Each doc_id must be non-empty")
@@ -277,8 +288,8 @@ def _prepare_cross_document_summary_parts(
     if len(ordered) < 2:
         raise HTTPException(status_code=400, detail="Provide at least two distinct doc_ids")
     n = len(ordered)
-    if body.limit_per_document is not None:
-        per = min(max(body.limit_per_document, 1), 64)
+    if limit_per_document is not None:
+        per = min(max(limit_per_document, 1), 64)
     else:
         per = max(2, min(24, max(s.retrieval_top_k // n, 2)))
     hits_per: dict[str, list[dict[str, Any]]] = {}
@@ -288,8 +299,19 @@ def _prepare_cross_document_summary_parts(
         hits_per[did] = hits
         sources_per[did] = _rag_sources_from_hits(hits)
     ctx = format_multi_document_context_block(ordered, hits_per)
-    user = f"INSTRUCTION:\n{body.instruction.strip()}\n\n{ctx}"
+    user = f"INSTRUCTION:\n{instruction.strip()}\n\n{ctx}"
     return ordered, user, sources_per, per
+
+
+def _prepare_cross_document_summary_parts(
+    body: CrossDocumentSummaryRequest,
+) -> tuple[list[str], str, dict[str, list[dict[str, Any]]], int]:
+    return _prepare_multi_document_instruction_context(
+        doc_ids=body.doc_ids,
+        retrieval_query=body.retrieval_query,
+        instruction=body.instruction,
+        limit_per_document=body.limit_per_document,
+    )
 
 
 def _prepare_structured_extract_parts(
@@ -349,6 +371,16 @@ def _prepare_risk_scan_parts(
 
 def _prepare_glossary_extract_parts(
     body: GlossaryExtractRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_outline_extract_parts(
+    body: DocumentOutlineRequest,
 ) -> tuple[str, str, list[dict[str, Any]], int]:
     return _single_doc_retrieval_context(
         doc_id=body.doc_id,
@@ -438,7 +470,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.19.0",
+    version="0.20.0",
 )
 
 _origins = _cors_origins()
@@ -1235,6 +1267,12 @@ def runtime_local_path_allowlist() -> dict[str, Any]:
     return gather_local_allowlist_inventory(raw_allow=s.legal_intel_allow_local_paths)
 
 
+@app.get("/v1/runtime/rlimits")
+def runtime_rlimits() -> dict[str, Any]:
+    """Unix ``resource.getrlimit`` snapshot (NOFILE, stack, AS, …); informative on macOS/Linux."""
+    return gather_rlimits_snapshot()
+
+
 @app.get("/v1/settings/effective")
 def effective_settings() -> dict[str, Any]:
     """Resolved configuration with secrets redacted (safe for screenshots)."""
@@ -1707,6 +1745,31 @@ def rag_cross_document_summary_stream(body: CrossDocumentSummaryRequest):
     return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
+@app.post("/v1/rag/cross-document-contradictions", response_model=ContradictionsScanResponse)
+def rag_cross_document_contradictions(body: ContradictionsScanRequest) -> ContradictionsScanResponse:
+    """Multi-doc retrieval + JSON tensions / aligned points (``contradictions_scan_v1``; extraction routing)."""
+    ordered, user, sources_per, per = _prepare_cross_document_summary_parts(body)
+    raw = chat_complete_json(
+        CONTRADICTIONS_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        contradictions: dict[str, Any] = json.loads(raw)
+        if not isinstance(contradictions, dict):
+            contradictions = {"_value": contradictions}
+    except Exception:
+        contradictions = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return ContradictionsScanResponse(
+        doc_ids=ordered,
+        contradictions=contradictions,
+        sources_by_doc_id=sources_per,
+        retrieval_top_k_per_document=per,
+    )
+
+
 @app.post("/v1/rag/structured-extract", response_model=StructuredExtractResponse)
 def rag_structured_extract(body: StructuredExtractRequest) -> StructuredExtractResponse:
     """Retrieval + ``json_object`` extraction for caller-defined category keys (extraction-task routing)."""
@@ -1862,6 +1925,61 @@ def rag_glossary_extract(body: GlossaryExtractRequest) -> GlossaryExtractRespons
     return GlossaryExtractResponse(
         doc_id=did,
         glossary=glossary,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/glossary-extract/stream")
+def rag_glossary_extract_stream(body: GlossaryExtractRequest):
+    """SSE: sources event + streaming glossary JSON text (``glossary_extract_v1``)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_glossary_extract_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                GLOSSARY_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/document-outline", response_model=DocumentOutlineResponse)
+def rag_document_outline(body: DocumentOutlineRequest) -> DocumentOutlineResponse:
+    """Single-doc retrieval + JSON outline / section map (``document_outline_v1``)."""
+    did, user, sources, lim = _prepare_outline_extract_parts(body)
+    raw = chat_complete_json(
+        DOCUMENT_OUTLINE_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        outline: dict[str, Any] = json.loads(raw)
+        if not isinstance(outline, dict):
+            outline = {"_value": outline}
+    except Exception:
+        outline = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return DocumentOutlineResponse(
+        doc_id=did,
+        outline=outline,
         sources=sources,
         retrieval_top_k=lim,
     )

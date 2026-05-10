@@ -1669,3 +1669,79 @@ def test_embeddings_centroid_similarities(api_client):
     assert d["count"] == 3
     assert len(d["centroid"]) == d["dimension"]
     assert len(d["cosine_to_centroid"]) == 3
+
+
+def test_cross_document_contradictions(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="cd1",
+        doc_label="spa.pdf",
+        chunks=[("Indemnity survives for twenty-four months.", {"page_start": 1, "page_end": 1})],
+    )
+    store.upsert_document_chunks(
+        doc_id="cd2",
+        doc_label="disclosure.pdf",
+        chunks=[("Indemnity for breaches survives twelve months only.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/cross-document-contradictions",
+        json={
+            "doc_ids": ["cd1", "cd2"],
+            "retrieval_query": "indemnity survival months",
+        },
+    )
+    assert r.status_code == 200
+    b = r.json()
+    assert len(b["doc_ids"]) == 2
+    assert b["contradictions"]
+    assert "cd1" in b["sources_by_doc_id"]
+
+
+def test_document_outline(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="out1",
+        doc_label="agr.pdf",
+        chunks=[
+            ("Article 5 — Confidentiality. Recipient shall protect Discloser's information.", {"page_start": 1, "page_end": 1}),
+            ("Article 6 — Term; termination for material breach after thirty days notice.", {"page_start": 2, "page_end": 2}),
+        ],
+    )
+    r = api_client.post(
+        "/v1/rag/document-outline",
+        json={"doc_id": "out1", "retrieval_query": "Article confidentiality termination"},
+    )
+    assert r.status_code == 200
+    o = r.json()
+    assert o["doc_id"] == "out1"
+    assert o["outline"]
+    assert len(o["sources"]) >= 1
+
+
+def test_glossary_extract_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="gls1",
+        doc_label="t.pdf",
+        chunks=[('"Seller" means Party A.', {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/glossary-extract/stream",
+        json={"doc_id": "gls1", "retrieval_query": "Seller"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text and "done" in r.text
+
+
+def test_runtime_rlimits(api_client):
+    r = api_client.get("/v1/runtime/rlimits")
+    assert r.status_code == 200
+    body = r.json()
+    assert "platform" in body
+    assert "rlimits_available" in body or "note" in body

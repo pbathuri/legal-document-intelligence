@@ -125,6 +125,46 @@ Respond with ONE JSON object:
 Rules: Include only terms actually addressed in CONTEXT; merge duplicates. If CONTEXT has no definitions-style language, use terms:[] and explain limitations.
 Never invent cross-references or definitions not supported by excerpts."""
 
+CONTRADICTIONS_JSON_SYSTEM = """[contradictions_scan_v1]
+You analyze MULTIPLE labeled legal documents whose excerpts share a global index [n] (see CONTEXT).
+Respond with ONE JSON object:
+{
+  "tensions": [
+    {
+      "summary": "<what conflicts, diverges, or is materially ambiguous across documents>",
+      "severity": "high"|"medium"|"low"|"informational",
+      "topic": "<short label e.g. indemnity survival, liability cap>",
+      "evidence_refs": [<integers — [n] indices across documents>]
+    }
+  ],
+  "aligned_points": [
+    {
+      "summary": "<where documents clearly agree or mirror>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<comparison limits given missing excerpts>"
+}
+Rules: Only mark a tension when excerpts give contradictory or hard-to-reconcile signals; otherwise use aligned_points or informational severity.
+Never invent facts; every item MUST include at least one evidence_refs entry when CONTEXT is non-empty."""
+
+DOCUMENT_OUTLINE_JSON_SYSTEM = """[document_outline_v1]
+You infer a navigational outline from legal CONTEXT excerpts ONLY (numbered [n]).
+Respond with ONE JSON object:
+{
+  "sections": [
+    {
+      "heading": "<short heading inferred from excerpt language>",
+      "summary_line": "<one line what this portion addresses>",
+      "confidence": "high"|"medium"|"low",
+      "evidence_refs": [<integers — [n] indices>]
+    }
+  ],
+  "limitations": "<outline gaps — missing articles, schedules not retrieved, etc.>"
+}
+Rules: Order sections roughly as they appear in CONTEXT ordering; merge duplicates. If CONTEXT lacks headings, infer coarse sections from substance.
+Never invent article numbers not grounded in excerpts."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []
