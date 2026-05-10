@@ -92,6 +92,14 @@ from legal_intel.api.schemas import (
     FinancialTermsLedgerResponse,
     RemediesPlaybookRequest,
     RemediesPlaybookResponse,
+    ConditionsPrecedentRequest,
+    ConditionsPrecedentResponse,
+    ExecutionFormalitiesRequest,
+    ExecutionFormalitiesResponse,
+    RetrievalExpandPlanRequest,
+    RetrievalExpandPlanResponse,
+    DocumentCentroidSimilarityRequest,
+    DocumentCentroidSimilarityResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -140,6 +148,9 @@ from legal_intel.prompts import (
     COVENANT_MATRIX_JSON_SYSTEM,
     FINANCIAL_TERMS_LEDGER_JSON_SYSTEM,
     REMEDIES_PLAYBOOK_JSON_SYSTEM,
+    CONDITIONS_PRECEDENT_JSON_SYSTEM,
+    EXECUTION_FORMALITIES_JSON_SYSTEM,
+    RETRIEVAL_EXPAND_PLAN_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -156,6 +167,7 @@ from legal_intel.runtime.git_snapshot import gather_git_snapshot
 from legal_intel.runtime.chunk_near_duplicate import near_duplicate_chunk_pairs
 from legal_intel.runtime.embedding_similarity import (
     centroid_similarities_for_texts,
+    cosine_between_centroids,
     farthest_embedding_pair,
     pairwise_cosine_matrix_for_texts,
     rank_candidates_by_query_embedding,
@@ -510,6 +522,40 @@ def _prepare_remedies_playbook_parts(
     )
 
 
+def _prepare_conditions_precedent_parts(
+    body: ConditionsPrecedentRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_execution_formalities_parts(
+    body: ExecutionFormalitiesRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_retrieval_expand_plan_parts(
+    body: RetrievalExpandPlanRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    store = LegalVectorStore()
+    s = get_settings()
+    lim = body.limit if body.limit is not None else s.retrieval_top_k
+    did = body.doc_id.strip()
+    rq = body.retrieval_query.strip()
+    hits = store.search(rq, limit=lim, doc_id=did)
+    ctx = format_context_block(hits)
+    user = f"AGENT_GOAL:\n{body.agent_goal.strip()}\n\nCONTEXT EXCERPTS:\n{ctx}"
+    return did, user, _rag_sources_from_hits(hits), lim
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -591,7 +637,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.24.0",
+    version="0.25.0",
 )
 
 _origins = _cors_origins()
@@ -1085,6 +1131,47 @@ def embedding_farthest_pair_route(body: EmbeddingFarthestPairRequest) -> Embeddi
         dimension=int(out["dimension"]),
         text_preview_a=str(out["text_preview_a"]),
         text_preview_b=str(out["text_preview_b"]),
+        embedding_provider=s.embedding_provider,
+        ollama_embedding_model=s.ollama_embedding_model,
+        embedding_model=s.embedding_model,
+    )
+
+
+@app.post(
+    "/v1/embeddings/document-centroid-similarity",
+    response_model=DocumentCentroidSimilarityResponse,
+)
+def embedding_document_centroid_similarity(
+    body: DocumentCentroidSimilarityRequest,
+) -> DocumentCentroidSimilarityResponse:
+    """Mean embedding per document (bounded chunk scroll) → cosine similarity — topical overlap / clustering QA."""
+    da = body.doc_id_a.strip()
+    db = body.doc_id_b.strip()
+    if not da or not db:
+        raise HTTPException(status_code=400, detail="doc_id_a and doc_id_b are required")
+    cap = int(body.max_chunks_per_document)
+    store = LegalVectorStore()
+    texts_a = store.list_chunk_texts(da, max_chunks=cap)
+    texts_b = store.list_chunk_texts(db, max_chunks=cap)
+    if not texts_a or not texts_b:
+        raise HTTPException(
+            status_code=400,
+            detail="Both documents must have indexed chunks (ingest first).",
+        )
+    s = get_settings()
+    try:
+        out = cosine_between_centroids(texts_a, texts_b)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return DocumentCentroidSimilarityResponse(
+        doc_id_a=da,
+        doc_id_b=db,
+        chunks_used_a=int(out["chunks_a"]),
+        chunks_used_b=int(out["chunks_b"]),
+        cosine_between_centroids=float(out["cosine_similarity"]),
+        dimension=int(out["dimension"]),
         embedding_provider=s.embedding_provider,
         ollama_embedding_model=s.ollama_embedding_model,
         embedding_model=s.embedding_model,
@@ -2709,6 +2796,171 @@ def rag_remedies_playbook_stream(body: RemediesPlaybookRequest):
                 temperature=0.0,
                 max_tokens=8192,
                 task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/conditions-precedent", response_model=ConditionsPrecedentResponse)
+def rag_conditions_precedent(body: ConditionsPrecedentRequest) -> ConditionsPrecedentResponse:
+    """Single-doc retrieval + JSON CP / closing-condition register (**conditions_precedent_v1**)."""
+    did, user, sources, lim = _prepare_conditions_precedent_parts(body)
+    raw = chat_complete_json(
+        CONDITIONS_PRECEDENT_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        conditions_register: dict[str, Any] = json.loads(raw)
+        if not isinstance(conditions_register, dict):
+            conditions_register = {"_value": conditions_register}
+    except Exception:
+        conditions_register = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return ConditionsPrecedentResponse(
+        doc_id=did,
+        conditions_register=conditions_register,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/conditions-precedent/stream")
+def rag_conditions_precedent_stream(body: ConditionsPrecedentRequest):
+    """SSE: sources + streaming CP JSON (**conditions_precedent_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_conditions_precedent_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                CONDITIONS_PRECEDENT_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/execution-formalities", response_model=ExecutionFormalitiesResponse)
+def rag_execution_formalities(body: ExecutionFormalitiesRequest) -> ExecutionFormalitiesResponse:
+    """Single-doc retrieval + JSON execution mechanics (**execution_formalities_v1**)."""
+    did, user, sources, lim = _prepare_execution_formalities_parts(body)
+    raw = chat_complete_json(
+        EXECUTION_FORMALITIES_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        formalities: dict[str, Any] = json.loads(raw)
+        if not isinstance(formalities, dict):
+            formalities = {"_value": formalities}
+    except Exception:
+        formalities = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return ExecutionFormalitiesResponse(
+        doc_id=did,
+        formalities=formalities,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/execution-formalities/stream")
+def rag_execution_formalities_stream(body: ExecutionFormalitiesRequest):
+    """SSE: sources + streaming execution-formalities JSON (**execution_formalities_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_execution_formalities_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                EXECUTION_FORMALITIES_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/retrieval-expand-plan", response_model=RetrievalExpandPlanResponse)
+def rag_retrieval_expand_plan(body: RetrievalExpandPlanRequest) -> RetrievalExpandPlanResponse:
+    """Single-doc retrieval + JSON follow-up search queries for agents (**retrieval_expand_plan_v1**; **specialist** routing)."""
+    did, user, sources, lim = _prepare_retrieval_expand_plan_parts(body)
+    raw = chat_complete_json(
+        RETRIEVAL_EXPAND_PLAN_JSON_SYSTEM,
+        user,
+        temperature=0.12,
+        max_tokens=8192,
+        task="specialist",
+    )
+    try:
+        expand_plan: dict[str, Any] = json.loads(raw)
+        if not isinstance(expand_plan, dict):
+            expand_plan = {"_value": expand_plan}
+    except Exception:
+        expand_plan = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return RetrievalExpandPlanResponse(
+        doc_id=did,
+        expand_plan=expand_plan,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/retrieval-expand-plan/stream")
+def rag_retrieval_expand_plan_stream(body: RetrievalExpandPlanRequest):
+    """SSE: sources + streaming retrieval-expand JSON (**retrieval_expand_plan_v1**; **specialist** routing)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_retrieval_expand_plan_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                RETRIEVAL_EXPAND_PLAN_JSON_SYSTEM,
+                user,
+                temperature=0.12,
+                max_tokens=8192,
+                task="specialist",
             ):
                 yield _sse_payload({"event": "token", "text": piece})
             yield _sse_payload({"event": "done"})

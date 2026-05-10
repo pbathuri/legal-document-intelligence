@@ -88,6 +88,7 @@ legal-api
    - `POST /v1/embeddings/centroid-similarities` — JSON `{ "texts": ["...", ...] }` (2–48 strings) → **mean embedding vector** + each row's cosine to that centroid (topic coherence / bundle QA)
    - `POST /v1/embeddings/nearest-to-query` — JSON `{ "query", "candidates": ["...", ...] }` (≤64 candidates) → **ranked** list by cosine similarity to the query embedding (same backend as RAG — useful for local rerank / shortlist)
    - `POST /v1/embeddings/farthest-pair` — JSON `{ "texts": ["...", ...] }` (3–40 strings) → indices + cosine for the pair with **minimum** similarity (**most divergent** excerpts — divergence QA / contrast mining)
+   - `POST /v1/embeddings/document-centroid-similarity` — JSON `{ "doc_id_a", "doc_id_b", "max_chunks_per_document" }` → cosine between **mean embeddings** of chunk texts per document (bounded Qdrant scroll — topical similarity / clustering signal without LLM)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/runtime/storage` — bounded filesystem inventory: bytes + file counts under **`UPLOAD_STORAGE_DIR`**, **`manifest.jsonl`** size/line estimate, **`RUNS_DB_PATH`** file size (device-local maintenance)
    - `GET /v1/runtime/git` — best-effort **Git** snapshot for the API **`cwd`** (`commit`, `branch`, `dirty` when **`git`** is on **PATH**)
@@ -143,6 +144,12 @@ legal-api
    - `POST /v1/rag/financial-terms-ledger/stream` — **SSE**: **`sources`** + streaming ledger JSON (**extraction** routing)
    - `POST /v1/rag/remedies-playbook` — retrieval + JSON **remedies / forum / fee-shifting map** (**`remedies_playbook_v1`**)
    - `POST /v1/rag/remedies-playbook/stream` — **SSE**: **`sources`** + streaming remedies JSON (**extraction** routing)
+   - `POST /v1/rag/conditions-precedent` — retrieval + JSON **conditions precedent / closing deliverables** (**`conditions_precedent_v1`**)
+   - `POST /v1/rag/conditions-precedent/stream` — **SSE**: **`sources`** + streaming CP JSON (**extraction** routing)
+   - `POST /v1/rag/execution-formalities` — retrieval + JSON **counterparts / e-sign / execution mechanics** (**`execution_formalities_v1`**)
+   - `POST /v1/rag/execution-formalities/stream` — **SSE**: **`sources`** + streaming execution JSON (**extraction** routing)
+   - `POST /v1/rag/retrieval-expand-plan` — retrieval + **`agent_goal`** + JSON **follow-up vector queries** for agents (**`retrieval_expand_plan_v1`**; **specialist** routing — uses **`LLM_MODEL_SPECIALIST`** / Ollama specialist slot)
+   - `POST /v1/rag/retrieval-expand-plan/stream` — **SSE**: **`sources`** + streaming expand-plan JSON (**specialist** routing)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`

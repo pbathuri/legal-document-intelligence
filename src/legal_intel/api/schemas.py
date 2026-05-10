@@ -769,3 +769,86 @@ class RemediesPlaybookResponse(BaseModel):
     playbook: dict[str, Any]
     sources: list[dict[str, Any]]
     retrieval_top_k: int
+
+
+class ConditionsPrecedentRequest(BaseModel):
+    """Single-doc retrieval + JSON CP / closing-condition inventory (``conditions_precedent_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="conditions precedent closing deliverables bring-down certificate regulatory approval HSR consent waiver satisfaction filings permits title lien payoff FIRPTA environmental employee benefit tax representations schedules disclosure schedules material contracts financing commitment letter knowledge definition MAC MAE",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class ConditionsPrecedentResponse(BaseModel):
+    doc_id: str
+    conditions_register: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class ExecutionFormalitiesRequest(BaseModel):
+    """Single-doc retrieval + JSON execution / counterparts / e-sign signals (``execution_formalities_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="counterparts facsimile electronic signature DocuSign Adobe Sign PDF delivery counterpart originals acknowledgment joinder signature authority officer secretary attest seal notary notices Section notices address",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class ExecutionFormalitiesResponse(BaseModel):
+    doc_id: str
+    formalities: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class RetrievalExpandPlanRequest(BaseModel):
+    """Single-doc retrieval + JSON follow-up retrieval queries for agents (``retrieval_expand_plan_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    agent_goal: str = Field(
+        ...,
+        min_length=1,
+        max_length=8000,
+        description="What the calling agent is trying to accomplish (grounds suggested_queries).",
+    )
+    retrieval_query: str = Field(
+        default="indemnity escrow representations warranties termination assignment intellectual property employment benefits litigation consent MAC MAC carve-out earn-out purchase price working capital adjustment schedules exhibits disclosure schedules",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class RetrievalExpandPlanResponse(BaseModel):
+    doc_id: str
+    expand_plan: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class DocumentCentroidSimilarityRequest(BaseModel):
+    """Cosine similarity between mean embeddings of two indexed documents (same backend as RAG)."""
+
+    doc_id_a: str = Field(..., min_length=1)
+    doc_id_b: str = Field(..., min_length=1)
+    max_chunks_per_document: int = Field(48, ge=4, le=128)
+
+
+class DocumentCentroidSimilarityResponse(BaseModel):
+    doc_id_a: str
+    doc_id_b: str
+    chunks_used_a: int
+    chunks_used_b: int
+    cosine_between_centroids: float
+    dimension: int
+    embedding_provider: str
+    ollama_embedding_model: str = ""
+    embedding_model: str = ""

@@ -152,6 +152,31 @@ def pairwise_cosine_matrix_for_texts(texts: list[str]) -> dict[str, Any]:
     }
 
 
+def cosine_between_centroids(texts_a: list[str], texts_b: list[str]) -> dict[str, Any]:
+    """Mean embedding for each side; cosine similarity between the two centroid vectors (cross-document topical overlap)."""
+    from legal_intel.rag.embeddings import make_embedding_model
+
+    ca = [(t or "").strip() for t in texts_a if (t or "").strip()]
+    cb = [(t or "").strip() for t in texts_b if (t or "").strip()]
+    if not ca or not cb:
+        raise ValueError("Each side must have at least one non-empty chunk")
+    m = make_embedding_model()
+    va = m.encode(ca)
+    vb = m.encode(cb)
+    na = len(va)
+    nb = len(vb)
+    dim = len(va[0])
+    centroid_a = [sum(va[i][j] for i in range(na)) / float(na) for j in range(dim)]
+    centroid_b = [sum(vb[i][j] for i in range(nb)) / float(nb) for j in range(dim)]
+    sim = cosine_similarity_uvec(centroid_a, centroid_b)
+    return {
+        "cosine_similarity": round(float(sim), 8),
+        "dimension": dim,
+        "chunks_a": na,
+        "chunks_b": nb,
+    }
+
+
 def similarity_for_text_pair(text_a: str, text_b: str) -> dict[str, Any]:
     """Encode both strings with the configured embedding backend and return cosine similarity."""
     from legal_intel.rag.embeddings import make_embedding_model

@@ -19,11 +19,18 @@ def gather_agent_bootstrap_pack(*, api_version: str) -> dict[str, Any]:
             "/v1/rag/covenant-matrix",
             "/v1/rag/financial-terms-ledger",
             "/v1/rag/remedies-playbook",
+            "/v1/rag/conditions-precedent",
+            "/v1/rag/execution-formalities",
             "/v1/rag/issue-spotter",
             "/v1/rag/deal-thesis",
         ],
+        "rag_agent_planner_examples": ["/v1/rag/retrieval-expand-plan"],
         "rag_synthesis_examples": ["/v1/rag/document-summary", "/v1/rag/bibliography-export"],
-        "embeddings_examples": ["/v1/embeddings/nearest-to-query", "/v1/embeddings/farthest-pair"],
+        "embeddings_examples": [
+            "/v1/embeddings/nearest-to-query",
+            "/v1/embeddings/farthest-pair",
+            "/v1/embeddings/document-centroid-similarity",
+        ],
     }
     return {
         "api_version": api_version,

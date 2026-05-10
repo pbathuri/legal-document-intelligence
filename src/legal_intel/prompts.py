@@ -286,6 +286,54 @@ Respond with ONE JSON object:
 }
 Use empty arrays when a topic is not mentioned. Never cite statutes or cases outside CONTEXT."""
 
+CONDITIONS_PRECEDENT_JSON_SYSTEM = """[conditions_precedent_v1]
+You extract **conditions precedent, closing deliverables, and bring-down requirements** stated ONLY in CONTEXT ([n]).
+Respond with ONE JSON object:
+{
+  "items": [
+    {
+      "summary": "<short description>",
+      "cp_type": "regulatory" | "third_party_consent" | "corporate_authorization" | "financial_statement" | "litigation_absence" | "title_encumbrance" | "tax" | "employee_benefit" | "material_contract" | "other",
+      "responsible_party_hint": "<Buyer/Seller/Target/Shared/Unknown>",
+      "timing": "before_signing" | "before_closing" | "after_closing" | "ongoing" | "unknown",
+      "waiver_or_satisfaction_note": "<null or short — only if excerpts mention waiver/satisfaction>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<coverage gaps>"
+}
+Rules: Do not invent approvals not mentioned. Merge duplicates."""
+
+EXECUTION_FORMALITIES_JSON_SYSTEM = """[execution_formalities_v1]
+You extract **execution mechanics** stated ONLY in CONTEXT ([n]): counterparts, facsimile/PDF effectiveness, electronic signatures, acknowledgments, joinder, entity signing authority hints.
+Respond with ONE JSON object:
+{
+  "counterparts": [{"text": "<>", "evidence_refs": [<integers>]}],
+  "facsimile_pdf_effectiveness": [{"text": "<>", "evidence_refs": [<integers>]}],
+  "electronic_signature": [{"text": "<>", "evidence_refs": [<integers>]}],
+  "signatories_or_entities": [{"text": "<>", "evidence_refs": [<integers>]}],
+  "notices_address_book_ref": [{"text": "<>", "evidence_refs": [<integers>]}],
+  "limitations": "<>"
+}
+Use empty arrays when not addressed."""
+
+RETRIEVAL_EXPAND_PLAN_JSON_SYSTEM = """[retrieval_expand_plan_v1]
+You propose **follow-up vector-search queries** for the same indexed document so an agent can deepen coverage.
+Use ONLY patterns suggested by CONTEXT ([n]) — topics, party names, dollar hooks, clause themes visible in excerpts.
+Respond with ONE JSON object:
+{
+  "suggested_queries": [
+    {
+      "query": "<dense retrieval string — keywords + short phrases>",
+      "targets": "indemnity" | "consideration" | "employment" | "ip" | "tax" | "real_property" | "conditions" | "termination" | "other",
+      "rationale": "<one sentence tie to visible excerpts>",
+      "evidence_refs": [<integers>]
+    }
+  ],
+  "limitations": "<angles likely missing from current retrieval slice>"
+}
+Rules: Provide 4–12 queries unless CONTEXT is empty; no duplicate strings."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

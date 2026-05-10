@@ -385,6 +385,50 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "conditions_precedent_v1" in system:
+            return json.dumps(
+                {
+                    "items": [
+                        {
+                            "summary": "[MOCK] Illustrative regulatory approval condition.",
+                            "cp_type": "regulatory",
+                            "responsible_party_hint": "Unknown",
+                            "timing": "before_closing",
+                            "waiver_or_satisfaction_note": None,
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real CP register.",
+                    "_mock": True,
+                }
+            )
+        if "execution_formalities_v1" in system:
+            return json.dumps(
+                {
+                    "counterparts": [{"text": "[MOCK] Counterparts placeholder.", "evidence_refs": [1]}],
+                    "facsimile_pdf_effectiveness": [],
+                    "electronic_signature": [],
+                    "signatories_or_entities": [],
+                    "notices_address_book_ref": [],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real execution mechanics.",
+                    "_mock": True,
+                }
+            )
+        if "retrieval_expand_plan_v1" in system:
+            return json.dumps(
+                {
+                    "suggested_queries": [
+                        {
+                            "query": "[MOCK] indemnification survival caps baskets carve-outs",
+                            "targets": "indemnity",
+                            "rationale": "[MOCK] Excerpts reference indemnity topics.",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real retrieval expansion.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

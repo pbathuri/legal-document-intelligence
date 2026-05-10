@@ -142,6 +142,29 @@ class LegalVectorStore:
         next_cursor = None if next_off is None else str(next_off)
         return rows, next_cursor
 
+    def list_chunk_texts(self, doc_id: str, *, max_chunks: int = 48) -> list[str]:
+        """Collect chunk payloads for one logical document (bounded scroll — device-local index)."""
+        did = (doc_id or "").strip()
+        if not did:
+            return []
+        cap = max(1, min(max_chunks, 256))
+        texts: list[str] = []
+        cursor = None
+        while len(texts) < cap:
+            batch = min(64, cap - len(texts))
+            rows, cursor = self.scroll_chunks_for_document(did, limit=batch, cursor=cursor)
+            if not rows:
+                break
+            for r in rows:
+                t = (r.get("text") or "").strip()
+                if t:
+                    texts.append(t)
+                if len(texts) >= cap:
+                    break
+            if cursor is None:
+                break
+        return texts[:cap]
+
     def aggregate_indexed_documents(self, *, max_points: int = 4000) -> list[dict[str, Any]]:
         """Distinct doc_id values seen in the collection (bounded scan)."""
         cap = max(50, min(max_points, 50_000))

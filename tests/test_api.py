@@ -2101,3 +2101,87 @@ def test_covenant_matrix_stream(api_client):
     )
     assert r.status_code == 200
     assert "sources" in r.text and "done" in r.text
+
+
+def test_conditions_precedent(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="cp1",
+        doc_label="spa.pdf",
+        chunks=[("Closing is conditioned on receipt of all required regulatory approvals.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/conditions-precedent",
+        json={"doc_id": "cp1", "retrieval_query": "regulatory approvals closing"},
+    )
+    assert r.status_code == 200
+    assert r.json()["conditions_register"]
+
+
+def test_execution_formalities(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="ex1",
+        doc_label="nda.pdf",
+        chunks=[("This Agreement may be executed in counterparts, each of which shall be deemed an original.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/execution-formalities",
+        json={"doc_id": "ex1", "retrieval_query": "counterparts executed"},
+    )
+    assert r.status_code == 200
+    assert r.json()["formalities"]
+
+
+def test_retrieval_expand_plan(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="rep1",
+        doc_label="spa.pdf",
+        chunks=[("Indemnification obligations survive until the eighteen-month anniversary of Closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/retrieval-expand-plan",
+        json={
+            "doc_id": "rep1",
+            "agent_goal": "Map indemnity and survival topics for second-pass retrieval.",
+            "retrieval_query": "indemnification survival closing",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["expand_plan"]
+
+
+def test_document_centroid_similarity(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="dc_a",
+        doc_label="a.pdf",
+        chunks=[
+            ("The Purchase Price shall be paid in cash at Closing.", {"page_start": 1, "page_end": 1}),
+            ("Seller represents authority to enter this Agreement.", {"page_start": 2, "page_end": 2}),
+        ],
+    )
+    store.upsert_document_chunks(
+        doc_id="dc_b",
+        doc_label="b.pdf",
+        chunks=[
+            ("Consideration includes a holdback of ten percent for indemnity claims.", {"page_start": 1, "page_end": 1}),
+        ],
+    )
+    r = api_client.post(
+        "/v1/embeddings/document-centroid-similarity",
+        json={"doc_id_a": "dc_a", "doc_id_b": "dc_b", "max_chunks_per_document": 8},
+    )
+    assert r.status_code == 200
+    j = r.json()
+    assert j["chunks_used_a"] >= 1 and j["chunks_used_b"] >= 1
+    assert -1.0 <= j["cosine_between_centroids"] <= 1.0
