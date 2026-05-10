@@ -197,6 +197,15 @@ def chat_complete_json(
                     "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real structured citations.",
                 }
             )
+        if "structured_extract_v1" in system:
+            return json.dumps(
+                {
+                    "parties": ["[MOCK] Party A"],
+                    "consideration": None,
+                    "evidence_refs": [1],
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

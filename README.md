@@ -77,13 +77,16 @@ legal-api
    - `GET /v1/ollama/agent-stack` — **single JSON** for local agents: Ollama **`/api/version`** + **`/api/tags`** + **`/api/ps`**, embed probe, per-task **`model_routing`**, and configuration **warnings** (partial failures are surfaced per-field, not 503)
    - `GET /v1/ollama/version` — lightweight **`GET /api/version`** from the Ollama daemon (single-purpose; also folded into preflight deep)
    - `GET /v1/ollama/ps` — native **`/api/ps`** JSON (models currently loaded in the daemon — complements **`GET /v1/ollama/host`**)
+   - `GET /v1/ollama/tags` — native **`GET /api/tags`** — **full** daemon JSON (digests, sizes; complements name-only lists in **`/health`**)
    - `POST /v1/ollama/embed-proxy` — raw **`POST /api/embed`** passthrough (full daemon JSON; defaults **`model`** to **`OLLAMA_EMBEDDING_MODEL`**)
    - `GET /v1/embeddings/info` — resolved embedding provider/model env + vector **dimension** + probe encode timing
    - `POST /v1/embeddings/warmup` — forces embedding backend load (sentence-transformers or Ollama `/api/embed`)
    - `POST /v1/embeddings/embed-texts` — batch vectors for up to **48** strings (same embedding backend as RAG; large payloads — use for pipelines/agents on-device)
+   - `POST /v1/embeddings/embed-local-text-files` — read UTF-8 files from absolute paths under **`LEGAL_INTEL_ALLOW_LOCAL_PATHS`** (≤16 paths, ≤256KiB each) → per-path vectors + errors (same embedding backend as RAG)
    - `POST /v1/embeddings/similarity` — JSON `{ "text_a", "text_b" }` → cosine similarity + embedding dimension (same backend as RAG)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/runtime/storage` — bounded filesystem inventory: bytes + file counts under **`UPLOAD_STORAGE_DIR`**, **`manifest.jsonl`** size/line estimate, **`RUNS_DB_PATH`** file size (device-local maintenance)
+   - `GET /v1/runtime/git` — best-effort **Git** snapshot for the API **`cwd`** (`commit`, `branch`, `dirty` when **`git`** is on **PATH**)
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
@@ -100,6 +103,8 @@ legal-api
    - `POST /v1/rag/compare-documents` — retrieval from **two** **`doc_id`** values + specialist comparison (**`COMPARE_DOCUMENTS_SYSTEM`**); optional **`limit_per_document`**
    - `POST /v1/rag/compare-documents/stream` — **SSE**: **`sources`** for both sides + specialist comparison tokens + **`done`**
    - `POST /v1/rag/cross-document-summary` — retrieval from **2–12** distinct **`doc_id`** values (shared **`retrieval_query`**) + one **synthesis** memo across labeled excerpts (**`CROSS_DOCUMENT_SUMMARIZE_SYSTEM`**); returns **`sources_by_doc_id`**
+   - `POST /v1/rag/cross-document-summary/stream` — **SSE**: **`sources_by_doc_id`** event + synthesis token stream + **`done`**
+   - `POST /v1/rag/structured-extract` — retrieval + **`json_object`** extraction for caller-defined **`categories`** keys + **`evidence_refs`** (**`STRUCTURED_EXTRACT_SYSTEM`**; extraction-task routing)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`

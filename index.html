@@ -283,6 +283,7 @@
         <button type="button" id="btnQdrant">Qdrant info</button>
         <button type="button" id="btnDisk">Disk space</button>
         <button type="button" id="btnRuntimeStorage" title="GET /v1/runtime/storage">Storage inventory</button>
+        <button type="button" id="btnRuntimeGit" title="GET /v1/runtime/git">Git snapshot</button>
         <button type="button" id="btnRuns">Recent runs</button>
         <button type="button" id="btnRunsStats" title="GET /v1/runs/stats">Runs stats</button>
         <button type="button" id="btnPreflight">Preflight</button>
@@ -298,6 +299,7 @@
         <button type="button" id="btnEmbInfo" title="GET /v1/embeddings/info">Embeddings info</button>
         <button type="button" id="btnOllamaVer" title="GET /v1/ollama/version">Ollama version</button>
         <button type="button" id="btnOllamaPs" title="GET /v1/ollama/ps">Ollama loaded models</button>
+        <button type="button" id="btnOllamaTags" title="GET /v1/ollama/tags">Ollama /api/tags</button>
         <button type="button" id="btnAgentStack" title="GET /v1/ollama/agent-stack">Ollama agent stack</button>
         <button type="button" id="btnSearchRuns">Search runs</button>
         <button type="button" id="btnExportRunsJson">Export runs (JSON)</button>
@@ -437,6 +439,17 @@
     </div>
 
     <div class="card" style="margin-top:1rem;">
+      <h2>Embed local text files (allowlisted paths)</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;"><code>POST /v1/embeddings/embed-local-text-files</code> — requires <code>LEGAL_INTEL_ALLOW_LOCAL_PATHS</code> on the API host (same as PDF local ingest). UTF-8, ≤256KiB per file, ≤16 paths.</p>
+      <textarea id="embedLocalPaths" placeholder="/absolute/path/to/file.txt&#10;/another/file.txt"
+        style="min-height:72px;"></textarea>
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnEmbedLocalFiles">Embed files</button>
+      </div>
+      <pre class="sources" id="embedLocalOut" style="margin-top:0.65rem;display:none;max-height:260px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
       <h2>RAG · document summary</h2>
       <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;"><code>POST /v1/rag/document-summary</code> (or <code>…/stream</code> SSE) — retrieves chunks for one <code>doc_id</code>, then synthesis-model summary (Ollama when configured).</p>
       <label for="sumDocId">doc_id</label>
@@ -489,8 +502,24 @@
       <textarea id="crossInstr" style="min-height:72px;">Synthesize tensions and alignments across the set; cite [n] only.</textarea>
       <div class="row" style="margin-top:0.65rem;">
         <button type="button" class="primary" id="btnCrossDocSummary">Synthesize across docs</button>
+        <button type="button" id="btnCrossDocStream" title="POST /v1/rag/cross-document-summary/stream">Stream (SSE)</button>
       </div>
       <pre class="sources" id="crossOut" style="margin-top:0.65rem;display:none;max-height:320px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>RAG · structured JSON extract</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;"><code>POST /v1/rag/structured-extract</code> — retrieval + <code>json_object</code> fields you name (e.g. parties, consideration).</p>
+      <label for="seDocId">doc_id</label>
+      <input type="text" id="seDocId" autocomplete="off" />
+      <label for="seRq" style="margin-top:0.65rem;">Retrieval query</label>
+      <input type="text" id="seRq" value="parties dates consideration governing law" autocomplete="off" />
+      <label for="seCats" style="margin-top:0.65rem;">Categories (comma-separated)</label>
+      <input type="text" id="seCats" value="parties, consideration, governing_law, closing_date" autocomplete="off" />
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnStructuredExtract">Extract JSON</button>
+      </div>
+      <pre class="sources" id="seOut" style="margin-top:0.65rem;display:none;max-height:320px;"></pre>
     </div>
 
     <div class="card" style="margin-top:1rem;">
@@ -735,6 +764,15 @@
         alert(e.message || String(e));
       }
     };
+    $("btnRuntimeGit").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/runtime/git");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
     $("btnAgentStack").onclick = async () => {
       try {
         const r = await fetchJson("/v1/ollama/agent-stack");
@@ -920,6 +958,15 @@
     $("btnOllamaPs").onclick = async () => {
       try {
         const r = await fetchJson("/v1/ollama/ps");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnOllamaTags").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/ollama/tags");
         $("metaOut").style.display = "block";
         $("metaOut").textContent = JSON.stringify(r, null, 2);
       } catch (e) {
@@ -1583,6 +1630,67 @@
         });
         $("crossOut").style.display = "block";
         $("crossOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnCrossDocStream").onclick = async () => {
+      try {
+        const lines = $("crossDocIds").value.split("\n").map((s) => s.trim()).filter(Boolean);
+        if (lines.length < 2) throw new Error("Enter at least two distinct doc_id lines.");
+        const payload = {
+          doc_ids: lines.slice(0, 12),
+          retrieval_query: $("crossRq").value.trim() || "obligations terms",
+          instruction: $("crossInstr").value.trim() || "Synthesize across documents.",
+        };
+        $("crossOut").style.display = "block";
+        let acc = "";
+        await readSseStream("/v1/rag/cross-document-summary/stream", payload, (ev) => {
+          if (ev.event === "sources") {
+            acc = JSON.stringify(ev, null, 2) + "\n--- stream ---\n";
+          }
+          if (ev.event === "token" && ev.text) acc += ev.text;
+          $("crossOut").textContent = acc;
+        });
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnStructuredExtract").onclick = async () => {
+      try {
+        const doc_id = $("seDocId").value.trim();
+        if (!doc_id) throw new Error("Enter doc_id.");
+        const cats = $("seCats").value.split(",").map((s) => s.trim()).filter(Boolean);
+        if (!cats.length) throw new Error("Enter at least one category.");
+        const out = await fetchJson("/v1/rag/structured-extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            doc_id,
+            retrieval_query: $("seRq").value.trim() || "terms",
+            categories: cats.slice(0, 24),
+          }),
+        });
+        $("seOut").style.display = "block";
+        $("seOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnEmbedLocalFiles").onclick = async () => {
+      try {
+        const paths = $("embedLocalPaths").value.split("\n").map((s) => s.trim()).filter(Boolean);
+        if (!paths.length) throw new Error("Enter at least one absolute file path.");
+        const out = await fetchJson("/v1/embeddings/embed-local-text-files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paths: paths.slice(0, 16) }),
+        });
+        $("embedLocalOut").style.display = "block";
+        $("embedLocalOut").textContent = JSON.stringify(out, null, 2);
       } catch (e) {
         alert(e.message || String(e));
       }

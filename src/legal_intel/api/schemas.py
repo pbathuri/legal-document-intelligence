@@ -337,3 +337,52 @@ class SqliteCheckpointRequest(BaseModel):
         default=False,
         description="When True, uses TRUNCATE checkpoint mode (more aggressive than PASSIVE).",
     )
+
+
+class EmbedLocalTextFilesRequest(BaseModel):
+    """Read UTF-8 text from absolute paths under ``LEGAL_INTEL_ALLOW_LOCAL_PATHS`` (device-local)."""
+
+    paths: list[str] = Field(..., min_length=1, max_length=16)
+
+
+class EmbedLocalTextItem(BaseModel):
+    path: str
+    resolved_path: str | None = None
+    ok: bool
+    error: str | None = None
+    bytes_read: int | None = None
+    vector: list[float] | None = None
+
+
+class EmbedLocalTextFilesResponse(BaseModel):
+    dimension: int
+    count_ok: int
+    embedding_provider: str
+    ollama_embedding_model: str = ""
+    embedding_model: str = ""
+    items: list[EmbedLocalTextItem]
+
+
+class StructuredExtractRequest(BaseModel):
+    """Retrieval scoped to one ``doc_id`` + JSON extraction for requested category keys."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="parties dates consideration governing law termination indemnity confidentiality",
+        min_length=1,
+        max_length=4000,
+    )
+    categories: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=24,
+        description="JSON keys to populate (e.g. parties, consideration).",
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class StructuredExtractResponse(BaseModel):
+    doc_id: str
+    extraction: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int

@@ -60,6 +60,14 @@ Schema:
 }
 Rules: ref_index must refer to an existing [n]. If CONTEXT is empty or irrelevant, use citations:[], explain in limitations."""
 
+STRUCTURED_EXTRACT_SYSTEM = """[structured_extract_v1]
+You extract structured diligence fields from legal CONTEXT excerpts ONLY.
+The USER message lists CATEGORIES (comma-separated). Respond with ONE JSON object:
+- Include every category name as a key. Values may be strings, arrays of strings, numbers, or null.
+- Always include "evidence_refs": an array of integers referring to [n] excerpt indices you used.
+- If CONTEXT lacks support for a category, set that key to null.
+Do not fabricate party names, statutes, dollar amounts, or dates not present in CONTEXT."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

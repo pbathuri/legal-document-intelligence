@@ -1301,3 +1301,113 @@ def test_ollama_inspect_batch_mocked(monkeypatch):
             assert j["count"] == 2
             assert all(x["ok"] for x in j["items"])
     get_settings.cache_clear()
+
+
+def test_ollama_tags_mocked(monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from unittest.mock import patch
+
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    fake = {"models": [{"name": "x", "digest": "abc"}]}
+    with patch("legal_intel.api.main.fetch_ollama_tags_raw", return_value=fake):
+        with TestClient(app) as client:
+            r = client.get("/v1/ollama/tags")
+            assert r.status_code == 200
+            assert r.json() == fake
+    get_settings.cache_clear()
+
+
+def test_runtime_git_endpoint(api_client):
+    r = api_client.get("/v1/runtime/git")
+    assert r.status_code == 200
+    body = r.json()
+    assert "git_available" in body
+
+
+def test_embed_local_text_files(tmp_path, monkeypatch):
+    allow = tmp_path / "allowed"
+    allow.mkdir()
+    f1 = allow / "a.txt"
+    f1.write_text("hello local embed", encoding="utf-8")
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LEGAL_INTEL_ALLOW_LOCAL_PATHS", str(allow))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/v1/embeddings/embed-local-text-files",
+            json={"paths": [str(f1)]},
+        )
+        assert r.status_code == 200
+        out = r.json()
+        assert out["count_ok"] == 1
+        assert len(out["items"]) == 1
+        assert out["items"][0]["ok"] is True
+        assert out["items"][0]["vector"]
+    get_settings.cache_clear()
+
+
+def test_cross_document_summary_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="cds1",
+        doc_label="a.pdf",
+        chunks=[("Alpha covenant applies.", {"page_start": 1, "page_end": 1})],
+    )
+    store.upsert_document_chunks(
+        doc_id="cds2",
+        doc_label="b.pdf",
+        chunks=[("Beta covenant applies.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/cross-document-summary/stream",
+        json={
+            "doc_ids": ["cds1", "cds2"],
+            "retrieval_query": "covenant",
+            "instruction": "Summarize.",
+        },
+    )
+    assert r.status_code == 200
+    assert "sources_by_doc_id" in r.text
+    assert "done" in r.text
+
+
+def test_structured_extract(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="se1",
+        doc_label="c.pdf",
+        chunks=[("Closing on January 15, 2026.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/structured-extract",
+        json={
+            "doc_id": "se1",
+            "retrieval_query": "closing date",
+            "categories": ["closing_date", "parties"],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doc_id"] == "se1"
+    assert body["extraction"]
+    assert len(body["sources"]) >= 1

@@ -27,6 +27,9 @@ from legal_intel.api.schemas import (
     DocumentPurgeBatchRequest,
     DocumentSummaryRequest,
     DocumentSummaryResponse,
+    EmbedLocalTextFilesRequest,
+    EmbedLocalTextFilesResponse,
+    EmbedLocalTextItem,
     EmbeddingBatchRequest,
     EmbeddingBatchResponse,
     EmbeddingSimilarityRequest,
@@ -52,6 +55,8 @@ from legal_intel.api.schemas import (
     RunSummaryOut,
     RuntimeOut,
     SqliteCheckpointRequest,
+    StructuredExtractRequest,
+    StructuredExtractResponse,
 )
 from legal_intel.config import get_settings
 from legal_intel.graph.build import run_diligence_for_domain, stream_diligence_for_domain
@@ -81,6 +86,7 @@ from legal_intel.prompts import (
     COMPARE_DOCUMENTS_SYSTEM,
     CROSS_DOCUMENT_SUMMARIZE_SYSTEM,
     QUERY_SYSTEM,
+    STRUCTURED_EXTRACT_SYSTEM,
     SUMMARIZE_SYSTEM,
     format_context_block,
     format_multi_document_context_block,
@@ -91,6 +97,7 @@ from legal_intel.runtime.api_metrics import incr_request as metrics_incr_request
 from legal_intel.runtime.audit_log import append_audit_event
 from legal_intel.runtime.build_info import gather_build_info
 from legal_intel.runtime.device_profile import gather_device_profile
+from legal_intel.runtime.git_snapshot import gather_git_snapshot
 from legal_intel.runtime.chunk_near_duplicate import near_duplicate_chunk_pairs
 from legal_intel.runtime.embedding_similarity import similarity_for_text_pair
 from legal_intel.runtime.ollama_embed_raw_proxy import ollama_native_embed_raw
@@ -99,6 +106,7 @@ from legal_intel.runtime.ollama_chat_proxy import ollama_native_chat
 from legal_intel.runtime.ollama_generate_proxy import ollama_native_generate
 from legal_intel.runtime.ollama_show_proxy import ollama_native_show
 from legal_intel.runtime.ollama_ps_proxy import fetch_ollama_running_models
+from legal_intel.runtime.ollama_tags_proxy import fetch_ollama_tags_raw
 from legal_intel.runtime.ollama_version_proxy import ollama_native_version
 from legal_intel.runtime.system_snapshot import gather_system_snapshot
 from legal_intel.runtime.uploads_scan import list_upload_storage_files
@@ -257,6 +265,24 @@ def _prepare_cross_document_summary_parts(
     return ordered, user, sources_per, per
 
 
+def _prepare_structured_extract_parts(
+    body: StructuredExtractRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    store = LegalVectorStore()
+    s = get_settings()
+    lim = body.limit if body.limit is not None else s.retrieval_top_k
+    did = body.doc_id.strip()
+    rq = body.retrieval_query.strip()
+    cats_raw = [c.strip() for c in body.categories if c and str(c).strip()]
+    if not cats_raw:
+        raise HTTPException(status_code=400, detail="Provide at least one category name")
+    hits = store.search(rq, limit=lim, doc_id=did)
+    ctx = format_context_block(hits)
+    cats_line = ", ".join(cats_raw)
+    user = f"CATEGORIES:\n{cats_line}\n\nCONTEXT EXCERPTS:\n{ctx}"
+    return did, user, _rag_sources_from_hits(hits), lim
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -338,7 +364,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.15.0",
+    version="0.16.0",
 )
 
 _origins = _cors_origins()
@@ -559,6 +585,128 @@ def embedding_embed_texts(body: EmbeddingBatchRequest) -> EmbeddingBatchResponse
     )
 
 
+@app.post("/v1/embeddings/embed-local-text-files", response_model=EmbedLocalTextFilesResponse)
+def embedding_embed_local_text_files(
+    body: EmbedLocalTextFilesRequest,
+) -> EmbedLocalTextFilesResponse:
+    """Read UTF-8 text from allowlisted absolute paths and batch-embed (same backend as RAG)."""
+    s = get_settings()
+    raw_allow = (s.legal_intel_allow_local_paths or "").strip()
+    if not raw_allow:
+        raise HTTPException(
+            status_code=403,
+            detail="Local path access disabled. Set LEGAL_INTEL_ALLOW_LOCAL_PATHS to comma-separated absolute directory prefixes.",
+        )
+    prefixes = parse_allow_prefixes(raw_allow)
+    if not prefixes:
+        raise HTTPException(status_code=403, detail="No valid allowlist prefixes configured.")
+
+    max_bytes = 262_144
+    texts: list[str] = []
+    rows: list[dict[str, Any]] = []
+
+    for raw in body.paths:
+        ps = (raw or "").strip()
+        if not ps:
+            rows.append({"path": raw or "", "error": "empty path"})
+            continue
+        try:
+            p = Path(ps).expanduser().resolve()
+        except Exception as e:
+            rows.append({"path": ps, "error": str(e)})
+            continue
+        if not is_path_under_allowlist(p, prefixes):
+            rows.append(
+                {
+                    "path": ps,
+                    "resolved_path": str(p),
+                    "error": "path not under configured allow prefixes",
+                }
+            )
+            continue
+        if not p.is_file():
+            rows.append({"path": ps, "resolved_path": str(p), "error": "not a regular file"})
+            continue
+        try:
+            blob = p.read_bytes()
+        except OSError as e:
+            rows.append({"path": ps, "resolved_path": str(p), "error": str(e)})
+            continue
+        if len(blob) > max_bytes:
+            rows.append(
+                {
+                    "path": ps,
+                    "resolved_path": str(p),
+                    "error": f"file exceeds {max_bytes} bytes",
+                }
+            )
+            continue
+        text = blob.decode("utf-8", errors="replace").strip()
+        if not text:
+            rows.append(
+                {
+                    "path": ps,
+                    "resolved_path": str(p),
+                    "bytes_read": len(blob),
+                    "error": "empty text after UTF-8 decode",
+                }
+            )
+            continue
+        rows.append(
+            {
+                "path": ps,
+                "resolved_path": str(p),
+                "bytes_read": len(blob),
+                "text_idx": len(texts),
+            }
+        )
+        texts.append(text)
+
+    from legal_intel.rag.embeddings import make_embedding_model
+
+    m = make_embedding_model()
+    vectors: list[list[float]] = []
+    if texts:
+        mat = m.encode(texts)
+        vectors = [list(map(float, row)) for row in mat]
+
+    items: list[EmbedLocalTextItem] = []
+    for row in rows:
+        if row.get("error"):
+            items.append(
+                EmbedLocalTextItem(
+                    path=str(row.get("path", "")),
+                    resolved_path=row.get("resolved_path"),
+                    ok=False,
+                    error=str(row["error"]),
+                    bytes_read=row.get("bytes_read"),
+                    vector=None,
+                )
+            )
+            continue
+        ti = row["text_idx"]
+        vec = vectors[ti] if ti < len(vectors) else None
+        items.append(
+            EmbedLocalTextItem(
+                path=str(row["path"]),
+                resolved_path=row.get("resolved_path"),
+                ok=True,
+                error=None,
+                bytes_read=row.get("bytes_read"),
+                vector=vec,
+            )
+        )
+
+    return EmbedLocalTextFilesResponse(
+        dimension=m.dimension,
+        count_ok=len(texts),
+        embedding_provider=s.embedding_provider,
+        ollama_embedding_model=s.ollama_embedding_model,
+        embedding_model=s.embedding_model,
+        items=items,
+    )
+
+
 @app.post("/v1/embeddings/similarity", response_model=EmbeddingSimilarityResponse)
 def embedding_cosine_similarity(body: EmbeddingSimilarityRequest) -> EmbeddingSimilarityResponse:
     """Cosine similarity between two texts using the active embedding backend (local)."""
@@ -643,6 +791,19 @@ def ollama_agent_stack() -> dict[str, Any]:
     embed ping, per-task model routing, and configuration warnings (never fails the whole response).
     """
     return gather_ollama_agent_stack()
+
+
+@app.get("/v1/ollama/tags")
+def ollama_tags_raw() -> dict[str, Any]:
+    """Native ``GET /api/tags`` — full JSON (model digests, sizes, manifests) from the local daemon."""
+    s = get_settings()
+    try:
+        return fetch_ollama_tags_raw(
+            s.ollama_base_url,
+            timeout_seconds=max(20.0, s.ollama_probe_timeout_seconds * 10),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
 
 @app.post("/v1/ollama/generate")
@@ -857,6 +1018,12 @@ def runtime_storage_detail() -> dict[str, Any]:
         runs_db_path=s.runs_db_path,
         persist_uploads=s.persist_uploads,
     )
+
+
+@app.get("/v1/runtime/git")
+def runtime_git_snapshot() -> dict[str, Any]:
+    """Best-effort Git metadata for the API process working tree (``git`` on PATH, bounded timeout)."""
+    return gather_git_snapshot(cwd=os.getcwd())
 
 
 @app.get("/v1/settings/effective")
@@ -1302,6 +1469,57 @@ def rag_cross_document_summary(body: CrossDocumentSummaryRequest) -> CrossDocume
         summary=summary,
         sources_by_doc_id=sources_per,
         retrieval_top_k_per_document=per,
+    )
+
+
+@app.post("/v1/rag/cross-document-summary/stream")
+def rag_cross_document_summary_stream(body: CrossDocumentSummaryRequest):
+    """SSE: per-doc sources then multi-document synthesis token stream."""
+
+    def event_gen():
+        try:
+            ordered, user, sources_per, per = _prepare_cross_document_summary_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_ids": ordered,
+                    "sources_by_doc_id": sources_per,
+                    "retrieval_top_k_per_document": per,
+                }
+            )
+            for piece in chat_stream(
+                CROSS_DOCUMENT_SUMMARIZE_SYSTEM, user, temperature=0.07, task="synthesis"
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/structured-extract", response_model=StructuredExtractResponse)
+def rag_structured_extract(body: StructuredExtractRequest) -> StructuredExtractResponse:
+    """Retrieval + ``json_object`` extraction for caller-defined category keys (extraction-task routing)."""
+    did, user, sources, lim = _prepare_structured_extract_parts(body)
+    raw = chat_complete_json(
+        STRUCTURED_EXTRACT_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        extraction: dict[str, Any] = json.loads(raw)
+        if not isinstance(extraction, dict):
+            extraction = {"_value": extraction}
+    except Exception:
+        extraction = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return StructuredExtractResponse(
+        doc_id=did,
+        extraction=extraction,
+        sources=sources,
+        retrieval_top_k=lim,
     )
 
 
