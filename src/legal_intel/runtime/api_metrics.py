@@ -38,3 +38,18 @@ def snapshot() -> dict[str, Any]:
             "requests_total": _total,
             "by_path_bucket": dict(sorted(_by_bucket.items())),
         }
+
+
+def prometheus_text() -> str:
+    """Minimal Prometheus exposition for scraping (path buckets as labels)."""
+    lines: list[str] = []
+    with _lock:
+        lines.append("# HELP legal_intel_http_requests_total Process HTTP requests since startup.")
+        lines.append("# TYPE legal_intel_http_requests_total counter")
+        lines.append(f"legal_intel_http_requests_total {_total}")
+        lines.append("# HELP legal_intel_http_requests_by_path_bucket Labeled request counts.")
+        lines.append("# TYPE legal_intel_http_requests_by_path_bucket counter")
+        for path, n in sorted(_by_bucket.items()):
+            esc = path.replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'legal_intel_http_requests_by_path_bucket{{path="{esc}"}} {n}')
+    return "\n".join(lines) + "\n"

@@ -66,19 +66,23 @@ legal-api
 
 2. Endpoints (selection):
    - `GET /health` — mock/live LLM, embedding provider, Qdrant, resolved multimodel names; when `LLM_PROVIDER=ollama`, lists models from local **Ollama** `/api/tags`
-   - `GET /v1/preflight` — single JSON for ops: Qdrant ping, Ollama `/api/tags` + optional `/api/embed` probe, disk, `device` profile
+   - `GET /v1/preflight` — single JSON for ops: Qdrant ping, Ollama `/api/tags` + optional `/api/embed` probe, disk, `device` profile; add **`?deep=1`** for embedded **`/api/version`** + **`/api/ps`**
+   - `GET /v1/build` — package version, API version, Python, optional **`LEGAL_INTEL_GIT_SHA`**
+   - `POST /v1/llm/probe` — one minimal chat completion via routed stack (skipped when mock LLM)
    - `GET /v1/metrics` — in-process HTTP request totals + path buckets (UUID run ids normalized); resets on restart
+   - `GET /v1/metrics/prometheus` — Prometheus text exposition for scraping
    - `GET /v1/ollama/host` — native daemon introspection: **`/api/version`** + **`/api/ps`** (running models on the machine)
    - `POST /v1/embeddings/warmup` — forces embedding backend load (sentence-transformers or Ollama `/api/embed`)
-   - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
+   - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
-   - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; NDJSON export; Markdown memo (`final_report`)
+   - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
    - `GET /v1/disk` — free space on volume holding upload storage
    - `GET /v1/settings/effective` — full resolved config with **secrets redacted**
    - `GET /v1/qdrant/info` — collection existence + point count (uses same client as RAG, including in-process `:memory:`)
    - `GET /v1/documents` — distinct indexed `doc_id` values (bounded payload scan)
    - `GET /v1/documents/{doc_id}/chunks` — paginated chunk payloads for RAG debugging (`cursor` + `limit`)
    - `DELETE /v1/documents/{doc_id}` — remove all vectors for that document from Qdrant
+   - `POST /v1/documents/purge` — JSON `{ "doc_ids": ["...", "..."] }` batch-delete vectors (≤200 ids)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
    - `POST /v1/ingest/local` — JSON body `{ "path": "/absolute/file.pdf", "use_ocr": false }` — only if `LEGAL_INTEL_ALLOW_LOCAL_PATHS` lists allowed absolute directory prefixes (comma-separated)
@@ -109,6 +113,8 @@ legal-api
 Environment names map to `llm_provider`, `ollama_base_url`, `llm_model_*` in [`src/legal_intel/config.py`](src/legal_intel/config.py) (`LLM_PROVIDER`, `OLLAMA_BASE_URL`, etc.).
 
 **Embeddings**: Default `EMBEDDING_PROVIDER=ollama` calls Ollama’s native `POST /api/embed` with `OLLAMA_EMBEDDING_MODEL` (e.g. `nomic-embed-text` after `ollama pull nomic-embed-text`), keeping vectors on the same stack as your agents. Use `EMBEDDING_PROVIDER=sentence_transformers` and `EMBEDDING_MODEL=…` for offline tests or when you prefer HuggingFace weights.
+
+**Audit trail**: Set `LEGAL_INTEL_AUDIT_JSONL` to an absolute or relative path for append-only JSON lines on mutating `/v1/*` calls (method, path, status, duration, `request_id`). Redacted in `/v1/settings/effective`.
 
 **Optional host metrics**: `pip install -e ".[device]"` installs `psutil` for RAM/disk detail in [`GET /v1/runtime`](src/legal_intel/runtime/device_profile.py) (`device` object).
 

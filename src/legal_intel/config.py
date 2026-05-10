@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     ollama_probe_timeout_seconds: float = 2.0
     # Comma-separated absolute path prefixes allowed for POST /v1/ingest/local (empty = disabled)
     legal_intel_allow_local_paths: str = ""
+    # Append-only JSONL path for mutating API audit (empty = disabled)
+    legal_intel_audit_jsonl: str = ""
 
 
 @functools.lru_cache(maxsize=1)

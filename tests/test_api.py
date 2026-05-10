@@ -386,6 +386,102 @@ def test_upload_manifest_tail(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
 
+def test_build_endpoint(api_client):
+    r = api_client.get("/v1/build")
+    assert r.status_code == 200
+    b = r.json()
+    assert b.get("package_name") == "legal-document-intelligence"
+    assert isinstance(b.get("api_version"), str) and len(b["api_version"]) >= 3
+
+
+def test_llm_probe_mock(api_client):
+    r = api_client.post("/v1/llm/probe")
+    assert r.status_code == 200
+    assert r.json().get("skipped") is True
+
+
+def test_metrics_prometheus(api_client):
+    r = api_client.get("/v1/metrics/prometheus")
+    assert r.status_code == 200
+    assert "legal_intel_http_requests_total" in r.text
+
+
+def test_preflight_deep(api_client):
+    r = api_client.get("/v1/preflight?deep=1")
+    assert r.status_code == 200
+    assert "ollama_host" in r.json()
+
+
+def test_export_runs_json(tmp_path, monkeypatch):
+    db = tmp_path / "js.db"
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_RUNS", "1")
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("PERSIST_UPLOADS", "0")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="j1",
+        doc_label="j.pdf",
+        chunks=[("x", {"page_start": 1, "page_end": 1})],
+    )
+    with TestClient(app) as client:
+        client.post("/v1/analyze", json={"query": "Q export json", "domain": "mna"})
+        r = client.get("/v1/runs/export/json?limit=50")
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        assert data[0].get("result")
+    get_settings.cache_clear()
+
+
+def test_documents_purge_batch(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="p1",
+        doc_label="p.pdf",
+        chunks=[("batch purge", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post("/v1/documents/purge", json={"doc_ids": ["p1", "missing"]})
+    assert r.status_code == 200
+    out = r.json()
+    assert out["vectors_removed_total"] >= 1
+    assert "p1" in out["by_doc_id"]
+
+
+def test_audit_jsonl_append(tmp_path, monkeypatch):
+    logf = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("LEGAL_INTEL_AUDIT_JSONL", str(logf))
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        client.post("/v1/embeddings/warmup")
+    assert logf.is_file()
+    line = logf.read_text(encoding="utf-8").strip().splitlines()[-1]
+    assert "/v1/embeddings/warmup" in line
+    get_settings.cache_clear()
+
+
 def test_runs_search(tmp_path, monkeypatch):
     db = tmp_path / "search.db"
     monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")

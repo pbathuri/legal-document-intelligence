@@ -194,6 +194,16 @@ class LegalVectorStore:
         )
         return n
 
+    def delete_document_vectors_batch(self, doc_ids: list[str]) -> dict[str, int]:
+        """Remove vectors for many logical documents; returns prior counts per id."""
+        out: dict[str, int] = {}
+        for raw in doc_ids:
+            did = (raw or "").strip()
+            if not did:
+                continue
+            out[did] = self.delete_document_vectors(did)
+        return out
+
     def clear_collection(self) -> None:
         if self._client.collection_exists(self._collection):
             self._client.delete_collection(self._collection)

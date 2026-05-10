@@ -27,6 +27,12 @@ class LocalPathIngestRequest(BaseModel):
     use_ocr: bool = False
 
 
+class DocumentPurgeBatchRequest(BaseModel):
+    """Remove Qdrant vectors for multiple indexed ``doc_id`` values."""
+
+    doc_ids: list[str] = Field(..., min_length=1, max_length=200)
+
+
 class IngestResponse(BaseModel):
     doc_id: str
     doc_label: str

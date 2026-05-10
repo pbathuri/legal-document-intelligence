@@ -30,4 +30,13 @@ def gather_device_profile() -> dict[str, Any]:
     except Exception as e:
         out["psutil_available"] = False
         out["psutil_error"] = str(e)
+
+    try:
+        from legal_intel.runtime.gpu_probe import nvidia_smi_gpus
+
+        gpus = nvidia_smi_gpus()
+        if gpus is not None:
+            out["nvidia_gpus"] = gpus
+    except Exception as e:
+        out["nvidia_probe_error"] = str(e)
     return out

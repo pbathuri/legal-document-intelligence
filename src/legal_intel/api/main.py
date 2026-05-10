@@ -20,6 +20,7 @@ from legal_intel.api.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
     BatchIngestResponse,
+    DocumentPurgeBatchRequest,
     HealthResponse,
     IngestResponse,
     LocalPathIngestRequest,
@@ -33,6 +34,7 @@ from legal_intel.graph.build import run_diligence_for_domain, stream_diligence_f
 from legal_intel.llm.client import chat_complete, chat_stream, resolve_model_for_task
 from legal_intel.persistence.runs import (
     delete_run,
+    export_runs_json_array,
     get_run,
     insert_run,
     iter_runs_ndjson_lines,
@@ -44,6 +46,8 @@ from legal_intel.prompts import QUERY_SYSTEM, format_context_block
 from legal_intel.rag.store import LegalVectorStore
 from legal_intel.runtime.api_metrics import bucket_path as metrics_bucket_path
 from legal_intel.runtime.api_metrics import incr_request as metrics_incr_request
+from legal_intel.runtime.audit_log import append_audit_event
+from legal_intel.runtime.build_info import gather_build_info
 from legal_intel.runtime.device_profile import gather_device_profile
 from legal_intel.runtime.local_paths import is_path_under_allowlist, parse_allow_prefixes
 from legal_intel.runtime.ollama_probe import (
@@ -76,10 +80,29 @@ def _public_settings_dict() -> dict[str, Any]:
         "langfuse_secret_key",
         "langfuse_public_key",
         "indian_kanoon_api_token",
+        "legal_intel_audit_jsonl",
     ):
         if d.get(key):
             d[key] = "***"
     return d
+
+
+def _audit_prefixes() -> tuple[str, ...]:
+    return (
+        "/v1/ingest",
+        "/v1/analyze",
+        "/v1/query",
+        "/v1/documents",
+        "/v1/runs",
+        "/v1/embeddings",
+        "/v1/llm",
+    )
+
+
+def _should_audit_path(method: str, path: str) -> bool:
+    if method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return False
+    return any(path == p or path.startswith(p + "/") for p in _audit_prefixes())
 
 
 def _ingest_pdf_core_bytes(content: bytes, filename: str, use_ocr: bool) -> IngestResponse:
@@ -139,7 +162,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.7.0",
+    version="0.8.0",
 )
 
 _origins = _cors_origins()
@@ -167,8 +190,35 @@ async def api_metrics_middleware(request: Request, call_next):
 
 
 @app.middleware("http")
+async def audit_jsonl_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    s = get_settings()
+    ap = (s.legal_intel_audit_jsonl or "").strip()
+    path = request.url.path
+    if ap and _should_audit_path(request.method, path):
+        try:
+            append_audit_event(
+                ap,
+                {
+                    "ts_epoch": time.time(),
+                    "method": request.method,
+                    "path": path,
+                    "status_code": response.status_code,
+                    "duration_ms": round((time.perf_counter() - start) * 1000, 3),
+                    "request_id": getattr(request.state, "request_id", None),
+                    "client": request.client.host if request.client else None,
+                },
+            )
+        except OSError:
+            pass
+    return response
+
+
+@app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     rid = request.headers.get("x-request-id") or str(uuid.uuid4())
+    request.state.request_id = rid
     response = await call_next(request)
     response.headers["X-Request-ID"] = rid
     return response
@@ -218,9 +268,16 @@ def health() -> HealthResponse:
 
 
 @app.get("/v1/preflight")
-def preflight() -> dict[str, Any]:
-    """Single payload for dashboards: Qdrant, Ollama tags/embed, disk, device."""
-    return gather_preflight()
+def preflight(deep: bool = False) -> dict[str, Any]:
+    """Single payload for dashboards: Qdrant, Ollama tags/embed, disk, device. ``deep=1`` adds Ollama /version+/ps."""
+    out = gather_preflight()
+    if deep:
+        s = get_settings()
+        out["ollama_host"] = gather_ollama_host_snapshot(
+            s.ollama_base_url,
+            timeout_seconds=max(5.0, s.ollama_probe_timeout_seconds * 3),
+        )
+    return out
 
 
 @app.get("/v1/metrics")
@@ -229,6 +286,16 @@ def metrics_json() -> dict[str, Any]:
     from legal_intel.runtime.api_metrics import snapshot
 
     return snapshot()
+
+
+@app.get("/v1/metrics/prometheus", response_class=PlainTextResponse)
+def metrics_prometheus() -> PlainTextResponse:
+    """Prometheus text exposition for ``legal_intel_http_requests_*`` counters."""
+    from legal_intel.runtime.api_metrics import prometheus_text
+
+    return PlainTextResponse(
+        prometheus_text(), media_type="text/plain; version=0.0.4; charset=utf-8"
+    )
 
 
 @app.get("/v1/ollama/host")
@@ -251,6 +318,42 @@ def embeddings_warmup() -> dict[str, Any]:
     _ = m.encode(["legal_intel embedding warmup probe."])
     dt = time.perf_counter() - t0
     return {"ok": True, "dimension": m.dimension, "elapsed_seconds": round(dt, 4)}
+
+
+@app.get("/v1/build")
+def build_metadata() -> dict[str, Any]:
+    """Package / Python / optional git SHA (set ``LEGAL_INTEL_GIT_SHA`` in deploy)."""
+    return gather_build_info(api_version=app.version)
+
+
+@app.post("/v1/llm/probe")
+def llm_route_probe() -> dict[str, Any]:
+    """Single completion via configured stack (Ollama OpenAI /v1 when not mock)."""
+    s = get_settings()
+    if s.legal_intel_mock_llm:
+        return {
+            "skipped": True,
+            "reason": "LEGAL_INTEL_MOCK_LLM",
+            "note": "Disable mock to hit Ollama/vLLM.",
+        }
+    try:
+        t0 = time.perf_counter()
+        text = chat_complete(
+            "Reply with exactly one word: pong",
+            "ping",
+            temperature=0.0,
+            max_tokens=8,
+            task="specialist",
+        )
+        dt = time.perf_counter() - t0
+        return {
+            "ok": True,
+            "model": resolve_model_for_task("specialist"),
+            "reply_preview": (text or "")[:300],
+            "elapsed_seconds": round(dt, 4),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
 
 @app.get("/v1/runtime", response_model=RuntimeOut)
@@ -329,6 +432,18 @@ def list_diligence_runs(limit: int = 40) -> list[RunSummaryOut]:
         )
         for r in rows
     ]
+
+
+@app.get("/v1/runs/export/json")
+def export_runs_json_blob(limit: int = 10_000) -> list[dict[str, Any]]:
+    """Full diligence runs as a JSON array (bounded; prefer NDJSON for huge archives)."""
+    s = get_settings()
+    if not s.persist_runs:
+        raise HTTPException(status_code=400, detail="Run persistence disabled")
+    return export_runs_json_array(
+        db_path=Path(s.runs_db_path),
+        limit=min(limit, 50_000),
+    )
 
 
 @app.get("/v1/runs/export")
@@ -557,6 +672,15 @@ def purge_document_vectors(doc_id: str) -> dict[str, Any]:
     store = LegalVectorStore()
     n = store.delete_document_vectors(doc_id)
     return {"doc_id": doc_id, "vectors_removed": n}
+
+
+@app.post("/v1/documents/purge")
+def purge_documents_batch(body: DocumentPurgeBatchRequest) -> dict[str, Any]:
+    """Remove vectors for many ``doc_id`` values (destructive; SQLite runs unchanged)."""
+    store = LegalVectorStore()
+    counts = store.delete_document_vectors_batch(body.doc_ids)
+    total = sum(counts.values())
+    return {"vectors_removed_total": total, "by_doc_id": counts}
 
 
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
