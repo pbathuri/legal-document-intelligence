@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     # Extraction
     extraction_max_pages: int = 10
     titlegraph_name_fuzzy_threshold: float = 0.82
-    # RAG — default embeddings via Ollama (/api/embed); tests force sentence_transformers
-    embedding_provider: EmbeddingProvider = "ollama"
+    # RAG — sentence-transformers is the portable default; switch to Ollama only when /api/embed works.
+    embedding_provider: EmbeddingProvider = "sentence_transformers"
     embedding_model: str = "BAAI/bge-m3"
     ollama_embedding_model: str = "nomic-embed-text"
     qdrant_url: str = "http://localhost:6333"
