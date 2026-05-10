@@ -1,0 +1,59 @@
+src/legal_intel/runtime/ollama_generate_proxy.py
+  s_c7571ff3b984be::t_eb10e0799aa731 1-26
+tests/test_embedding_similarity.py
+  s_c7571ff3b984be::t_ed94a33dd372e6 1-13
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_88aa79fd85ce9f 107-108,112-126
+  s_c7571ff3b984be::t_0220e32a6a8520 297-309
+  s_c7571ff3b984be::t_df67a250ed952c 874
+  s_c7571ff3b984be::t_f1e25d7d3dbfc3 24-25,29,32
+  s_c7571ff3b984be::t_9efe5653a8cd50 414-462
+  s_c7571ff3b984be::t_b416b504d24967 863,865-873,875-877
+  s_c7571ff3b984be::t_ae4831bb9e0b2a 889
+  s_c7571ff3b984be::t_c553a6a4e589e8 47
+  s_c7571ff3b984be::t_d5ad30a4d8ed33 363-377
+  s_c7571ff3b984be::t_4cf7c19ee702fb 57-59
+  s_c7571ff3b984be::t_1aa52f854650b2 192
+tests/test_api.py
+  s_c7571ff3b984be::t_d4f98f08cd9e4a 519-532,534-616
+README.md
+  s_c7571ff3b984be::t_09f08b6573e5bc 96-99
+  s_c7571ff3b984be::t_d8cd83200be5e8 78
+  s_c7571ff3b984be::t_54507b646fac68 69-70
+src/legal_intel/persistence/runs.py
+  s_c7571ff3b984be::t_da7846b9decfb6 136-154
+.env.example
+  s_c7571ff3b984be::t_44686e92afe5d1 47
+src/legal_intel/runtime/embedding_similarity.py
+  s_c7571ff3b984be::t_a30b8f09233912 1-37
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_ea04e3dd2b7717 84
+  s_c7571ff3b984be::t_cde2030beb0d03 81-83,85-113
+src/legal_intel/runtime/system_snapshot.py
+  s_c7571ff3b984be::t_ff9cf975989604 21-34
+  s_c7571ff3b984be::t_c63549ab18a4d4 1-20,35-41
+index.html
+  s_c7571ff3b984be::t_464666904bb18e 966-991
+  s_c7571ff3b984be::t_41f6b9bb4e0847 300-301
+  s_c7571ff3b984be::t_dc61a9ed2c9ebc 362
+  s_c7571ff3b984be::t_04caa77759964c 371-398
+  s_c7571ff3b984be::t_57cb589632f6b9 722-795
+  s_c7571ff3b984be::t_9b97302b644922 265-266
+  s_c7571ff3b984be::t_39c93d3ed8812c 481-504
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "2ddfdc4fd25264bc2f71cfb6fae03f4e26353bfd",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
