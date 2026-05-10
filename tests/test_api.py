@@ -1192,3 +1192,112 @@ def test_compare_documents_stream(api_client):
     assert r.status_code == 200
     assert "sources_a" in r.text
     assert "token" in r.text or "MOCK" in r.text
+
+
+def test_cross_document_summary(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="xd1",
+        doc_label="a.pdf",
+        chunks=[("Seller warrants title to the parcel.", {"page_start": 1, "page_end": 1})],
+    )
+    store.upsert_document_chunks(
+        doc_id="xd2",
+        doc_label="b.pdf",
+        chunks=[("Buyer accepts title as-is with no warranty.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/cross-document-summary",
+        json={
+            "doc_ids": ["xd1", "xd2"],
+            "retrieval_query": "warranty title",
+            "instruction": "Note tensions only.",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doc_ids"] == ["xd1", "xd2"]
+    assert body["summary"]
+    assert "xd1" in body["sources_by_doc_id"]
+    assert "xd2" in body["sources_by_doc_id"]
+
+
+def test_query_citations(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="qc1",
+        doc_label="x.pdf",
+        chunks=[("Interest rate is LIBOR plus two percent.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/query/citations",
+        json={"question": "What is the interest rate?", "doc_id": "qc1"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["answer_markdown"]
+    assert isinstance(body["citations"], list)
+    assert body["structured"]
+    assert len(body["sources"]) >= 1
+
+
+def test_checkpoint_sqlite(tmp_path, monkeypatch):
+    db = tmp_path / "walchk.db"
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_RUNS", "1")
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+    from legal_intel.persistence.runs import insert_run
+
+    insert_run(
+        db_path=db,
+        domain="mna",
+        query="q",
+        doc_ids=[],
+        result={"final_report": "x"},
+    )
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.post("/v1/maintenance/checkpoint-sqlite", json={"truncate_wal": False})
+        assert r.status_code == 200
+        assert "journal_mode" in r.json()
+    get_settings.cache_clear()
+
+
+def test_ollama_inspect_batch_mocked(monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from unittest.mock import patch
+
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with patch(
+        "legal_intel.api.main.ollama_native_show",
+        return_value={"license": "MIT"},
+    ):
+        with TestClient(app) as client:
+            r = client.post(
+                "/v1/ollama/models/inspect-batch",
+                json={"models": ["a", "b"]},
+            )
+            assert r.status_code == 200
+            j = r.json()
+            assert j["count"] == 2
+            assert all(x["ok"] for x in j["items"])
+    get_settings.cache_clear()

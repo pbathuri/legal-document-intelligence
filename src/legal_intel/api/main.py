@@ -22,6 +22,8 @@ from legal_intel.api.schemas import (
     BatchIngestResponse,
     CompareDocumentsRequest,
     CompareDocumentsResponse,
+    CrossDocumentSummaryRequest,
+    CrossDocumentSummaryResponse,
     DocumentPurgeBatchRequest,
     DocumentSummaryRequest,
     DocumentSummaryResponse,
@@ -36,10 +38,12 @@ from legal_intel.api.schemas import (
     OllamaChatRequest,
     OllamaEmbedProxyRequest,
     OllamaGenerateRequest,
+    OllamaModelsInspectRequest,
     OllamaShowRequest,
     QueryBatchItem,
     QueryBatchRequest,
     QueryBatchResponse,
+    QueryCitationsResponse,
     QueryRequest,
     QueryResponse,
     RetrieveBatchItem,
@@ -47,10 +51,16 @@ from legal_intel.api.schemas import (
     RetrieveOnlyResponse,
     RunSummaryOut,
     RuntimeOut,
+    SqliteCheckpointRequest,
 )
 from legal_intel.config import get_settings
 from legal_intel.graph.build import run_diligence_for_domain, stream_diligence_for_domain
-from legal_intel.llm.client import chat_complete, chat_stream, resolve_model_for_task
+from legal_intel.llm.client import (
+    chat_complete,
+    chat_complete_json,
+    chat_stream,
+    resolve_model_for_task,
+)
 from legal_intel.persistence.runs import (
     delete_run,
     export_runs_json_array,
@@ -63,13 +73,17 @@ from legal_intel.persistence.runs import (
     search_runs,
     sqlite_integrity_check,
     vacuum_sqlite_file,
+    wal_checkpoint_sqlite,
 )
 from legal_intel.pipeline import doc_id_from_pdf_bytes, ingest_pdf_with_stats
 from legal_intel.prompts import (
+    CITATIONS_JSON_SYSTEM,
     COMPARE_DOCUMENTS_SYSTEM,
+    CROSS_DOCUMENT_SUMMARIZE_SYSTEM,
     QUERY_SYSTEM,
     SUMMARIZE_SYSTEM,
     format_context_block,
+    format_multi_document_context_block,
 )
 from legal_intel.rag.store import LegalVectorStore
 from legal_intel.runtime.api_metrics import bucket_path as metrics_bucket_path
@@ -212,6 +226,55 @@ def _prepare_compare_documents_parts(
     return da, db, user, _rag_sources_from_hits(hits_a), _rag_sources_from_hits(hits_b), per
 
 
+def _prepare_cross_document_summary_parts(
+    body: CrossDocumentSummaryRequest,
+) -> tuple[list[str], str, dict[str, list[dict[str, Any]]], int]:
+    store = LegalVectorStore()
+    s = get_settings()
+    rq = body.retrieval_query.strip()
+    ordered: list[str] = []
+    for raw in body.doc_ids:
+        d = (raw or "").strip()
+        if not d:
+            raise HTTPException(status_code=400, detail="Each doc_id must be non-empty")
+        if d not in ordered:
+            ordered.append(d)
+    if len(ordered) < 2:
+        raise HTTPException(status_code=400, detail="Provide at least two distinct doc_ids")
+    n = len(ordered)
+    if body.limit_per_document is not None:
+        per = min(max(body.limit_per_document, 1), 64)
+    else:
+        per = max(2, min(24, max(s.retrieval_top_k // n, 2)))
+    hits_per: dict[str, list[dict[str, Any]]] = {}
+    sources_per: dict[str, list[dict[str, Any]]] = {}
+    for did in ordered:
+        hits = store.search(rq, limit=per, doc_id=did)
+        hits_per[did] = hits
+        sources_per[did] = _rag_sources_from_hits(hits)
+    ctx = format_multi_document_context_block(ordered, hits_per)
+    user = f"INSTRUCTION:\n{body.instruction.strip()}\n\n{ctx}"
+    return ordered, user, sources_per, per
+
+
+def _parse_citations_llm_json(
+    raw: str,
+) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("top-level JSON must be an object")
+    except Exception:
+        return raw, [], "model returned non-JSON or invalid shape", {"raw": (raw or "")[:8000]}
+    ans = str(data.get("direct_answer") or data.get("answer") or "")
+    cits = data.get("citations")
+    if not isinstance(cits, list):
+        cits = []
+    lim = data.get("limitations")
+    lim_s = str(lim) if lim is not None else None
+    return ans, cits, lim_s, data
+
+
 def _should_audit_path(method: str, path: str) -> bool:
     if method not in ("POST", "PUT", "PATCH", "DELETE"):
         return False
@@ -275,7 +338,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.14.0",
+    version="0.15.0",
 )
 
 _origins = _cors_origins()
@@ -655,6 +718,24 @@ def ollama_show_model(body: OllamaShowRequest) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
+@app.post("/v1/ollama/models/inspect-batch")
+def ollama_models_inspect_batch(body: OllamaModelsInspectRequest) -> dict[str, Any]:
+    """Sequential native ``/api/show`` for up to eight models (operator / agent introspection)."""
+    s = get_settings()
+    timeout = max(45.0, s.ollama_probe_timeout_seconds * 25)
+    items: list[dict[str, Any]] = []
+    for raw in body.models:
+        name = (raw or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Each model name must be non-empty")
+        try:
+            detail = ollama_native_show(s.ollama_base_url, name, timeout_seconds=timeout)
+            items.append({"model": name, "ok": True, "detail": detail})
+        except Exception as e:
+            items.append({"model": name, "ok": False, "error": str(e)})
+    return {"count": len(items), "items": items}
+
+
 @app.post("/v1/ollama/embed-proxy")
 def ollama_embed_proxy(body: OllamaEmbedProxyRequest) -> dict[str, Any]:
     """Raw passthrough to Ollama ``POST /api/embed`` — full JSON response (daemon debugging)."""
@@ -720,6 +801,20 @@ def maintenance_integrity_runs_db() -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Run persistence disabled")
     try:
         return sqlite_integrity_check(Path(s.runs_db_path))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/maintenance/checkpoint-sqlite")
+def maintenance_wal_checkpoint_runs_db(body: SqliteCheckpointRequest) -> dict[str, Any]:
+    """SQLite ``PRAGMA wal_checkpoint`` — useful after sustained writes (no-op if journal_mode is not WAL)."""
+    s = get_settings()
+    if not s.persist_runs:
+        raise HTTPException(status_code=400, detail="Run persistence disabled")
+    try:
+        return wal_checkpoint_sqlite(Path(s.runs_db_path), truncate=body.truncate_wal)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
@@ -1192,6 +1287,24 @@ def rag_compare_documents_stream(body: CompareDocumentsRequest):
     return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
+@app.post("/v1/rag/cross-document-summary", response_model=CrossDocumentSummaryResponse)
+def rag_cross_document_summary(body: CrossDocumentSummaryRequest) -> CrossDocumentSummaryResponse:
+    """Retrieve from 2–12 ``doc_id`` values with shared query; one synthesis memo across labeled excerpts."""
+    ordered, user, sources_per, per = _prepare_cross_document_summary_parts(body)
+    summary = chat_complete(
+        CROSS_DOCUMENT_SUMMARIZE_SYSTEM,
+        user,
+        temperature=0.07,
+        task="synthesis",
+    )
+    return CrossDocumentSummaryResponse(
+        doc_ids=ordered,
+        summary=summary,
+        sources_by_doc_id=sources_per,
+        retrieval_top_k_per_document=per,
+    )
+
+
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
 def analyze(body: AnalyzeRequest) -> AnalyzeResponse:
     if body.domain == "india_re" and not body.doc_ids:
@@ -1266,6 +1379,32 @@ def rag_query(body: QueryRequest) -> QueryResponse:
     user = f"QUESTION:\n{body.question}\n\nCONTEXT EXCERPTS:\n{ctx}"
     answer = chat_complete(QUERY_SYSTEM, user, temperature=0.05, task="specialist")
     return QueryResponse(answer=answer, sources=_rag_sources_from_hits(hits))
+
+
+@app.post("/v1/query/citations", response_model=QueryCitationsResponse)
+def rag_query_citations(body: QueryRequest) -> QueryCitationsResponse:
+    """Same retrieval as ``/v1/query`` but LLM returns **JSON** citations (``ref_index`` ↔ chunk ``[n]``)."""
+    store = LegalVectorStore()
+    lim = _effective_retrieval_limit(body)
+    hits = store.search(body.question, limit=lim, doc_id=body.doc_id)
+    ctx = format_context_block(hits)
+    user = f"QUESTION:\n{body.question}\n\nCONTEXT EXCERPTS:\n{ctx}"
+    raw = chat_complete_json(
+        CITATIONS_JSON_SYSTEM,
+        user,
+        temperature=0.02,
+        max_tokens=8192,
+        task="specialist",
+    )
+    ans_md, cits, lim_s, structured = _parse_citations_llm_json(raw)
+    return QueryCitationsResponse(
+        answer_markdown=ans_md,
+        citations=cits,
+        limitations=lim_s,
+        structured=structured,
+        sources=_rag_sources_from_hits(hits),
+        retrieval_top_k=lim,
+    )
 
 
 @app.post("/v1/query/retrieve-only", response_model=RetrieveOnlyResponse)

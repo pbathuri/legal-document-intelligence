@@ -282,3 +282,58 @@ class RuntimeOut(BaseModel):
     ollama_base_url: str
     qdrant_url: str
     device: dict[str, Any] | None = None
+
+
+class CrossDocumentSummaryRequest(BaseModel):
+    """Retrieve chunks from multiple ``doc_id`` values then one synthesis memo."""
+
+    doc_ids: list[str] = Field(..., min_length=2, max_length=12)
+    retrieval_query: str = Field(
+        default="parties obligations representations warranties indemnity consideration governing law",
+        min_length=1,
+        max_length=4000,
+    )
+    instruction: str = Field(
+        default="Synthesize across documents for counsel review; cite only excerpt indices.",
+        min_length=1,
+        max_length=12000,
+    )
+    limit_per_document: int | None = Field(
+        None,
+        ge=1,
+        le=64,
+        description="Chunks per document; default splits configured retrieval depth across documents.",
+    )
+
+
+class CrossDocumentSummaryResponse(BaseModel):
+    doc_ids: list[str]
+    summary: str
+    sources_by_doc_id: dict[str, list[dict[str, Any]]]
+    retrieval_top_k_per_document: int
+
+
+class QueryCitationsResponse(BaseModel):
+    """Grounded answer with JSON citation objects + flattened markdown answer."""
+
+    answer_markdown: str
+    citations: list[dict[str, Any]]
+    limitations: str | None = None
+    structured: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class OllamaModelsInspectRequest(BaseModel):
+    """Bounded sequential native ``/api/show`` calls for operator/agent introspection."""
+
+    models: list[str] = Field(..., min_length=1, max_length=8)
+
+
+class SqliteCheckpointRequest(BaseModel):
+    """Optional WAL checkpoint aggressiveness for SQLite maintenance."""
+
+    truncate_wal: bool = Field(
+        default=False,
+        description="When True, uses TRUNCATE checkpoint mode (more aggressive than PASSIVE).",
+    )

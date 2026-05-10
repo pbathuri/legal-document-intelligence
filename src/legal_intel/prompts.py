@@ -42,6 +42,24 @@ Output markdown with: Alignment (where they agree or mirror), Contrasts (materia
 Conflict or ambiguity signals (only if grounded in excerpts), and Limitations (what cannot be compared because it is missing).
 Use ONLY the provided excerpts. Never invent clause numbers, statutes, or facts not shown."""
 
+CROSS_DOCUMENT_SUMMARIZE_SYSTEM = """You synthesize findings across multiple labeled documents.
+Each section begins with ### DOCUMENT doc_id=… ### and contains numbered excerpts [n].
+Produce markdown with: Executive synthesis (cross-cutting themes), Per-document highlights (bullets tied to [n] refs),
+Cross-document tensions or discrepancies (only if grounded in excerpts), Limitations.
+Use ONLY the CONTEXT excerpts. Never invent statutes, cases, or facts not shown."""
+
+CITATIONS_JSON_SYSTEM = """You answer using ONLY the CONTEXT excerpts below. Each excerpt is labeled [n].
+You MUST respond with a single JSON object (no markdown fences, no prose outside JSON).
+Schema:
+{
+  "direct_answer": "<markdown string — concise answer>",
+  "citations": [
+    {"ref_index": <integer matching [n] in CONTEXT>, "relevance": "high"|"medium"|"low", "quote": "<short verbatim quote from that excerpt>"}
+  ],
+  "limitations": "<what CONTEXT does not establish>"
+}
+Rules: ref_index must refer to an existing [n]. If CONTEXT is empty or irrelevant, use citations:[], explain in limitations."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []
@@ -53,3 +71,29 @@ def format_context_block(hits: list[dict]) -> str:
         head = f"[{i}] doc={did} ({label}) score={score}"
         lines.append(f"{head}\n{text}\n")
     return "\n---\n".join(lines) if lines else "(No retrieved context — index documents first.)"
+
+
+def format_multi_document_context_block(
+    ordered_doc_ids: list[str],
+    hits_per_doc: dict[str, list[dict]],
+) -> str:
+    """Sequential [n] references across documents (stable order = request order)."""
+    parts: list[str] = []
+    global_i = 1
+    for did in ordered_doc_ids:
+        hits = hits_per_doc.get(did) or []
+        parts.append(f"### DOCUMENT doc_id={did} ###")
+        if not hits:
+            parts.append(
+                "(No chunks retrieved for this document — widen retrieval_query or confirm indexing.)"
+            )
+            parts.append("")
+            continue
+        for h in hits:
+            label = h.get("doc_label", "doc")
+            text = h.get("text", "")
+            score = h.get("score")
+            parts.append(f"[{global_i}] doc={did} ({label}) score={score}\n{text}\n")
+            global_i += 1
+        parts.append("")
+    return "\n".join(parts).strip()

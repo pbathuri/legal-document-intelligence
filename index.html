@@ -309,12 +309,19 @@
         <button type="button" id="btnVacuumSqlite" title="POST /v1/maintenance/vacuum-sqlite">Vacuum runs DB</button>
         <button type="button" id="btnOptimizeSqlite" title="POST /v1/maintenance/optimize-sqlite">Optimize runs DB</button>
         <button type="button" id="btnIntegritySqlite" title="POST /v1/maintenance/integrity-sqlite">Integrity check</button>
+        <button type="button" id="btnCheckpointSqlite" title="POST /v1/maintenance/checkpoint-sqlite">WAL checkpoint</button>
       </div>
       <div class="row" style="margin-top:0.65rem;">
         <label for="ollamaShowModel" style="margin:0;align-self:center;">Ollama model inspect</label>
         <input type="text" id="ollamaShowModel" placeholder="e.g. llama3.2" autocomplete="off"
           style="flex:1;min-width:160px;" />
         <button type="button" id="btnOllamaShow" title="POST /v1/ollama/show">Show</button>
+      </div>
+      <label for="ollamaInspectModels" style="margin-top:0.65rem;display:block;">Batch model inspect (one per line, ≤8)</label>
+      <textarea id="ollamaInspectModels" placeholder="llama3.2&#10;mistral"
+        style="min-height:56px;width:100%;"></textarea>
+      <div class="row" style="margin-top:0.45rem;">
+        <button type="button" id="btnOllamaInspectBatch" title="POST /v1/ollama/models/inspect-batch">Inspect batch</button>
       </div>
       <pre class="sources" id="metaOut" style="margin-top:0.65rem;max-height:220px;display:none;"></pre>
     </div>
@@ -378,6 +385,7 @@
       <div class="row" style="margin-top:0.65rem;">
         <button type="button" class="primary" id="btnQuery">Ask</button>
         <button type="button" id="btnQueryStream">Stream answer</button>
+        <button type="button" id="btnQueryCitations" title="POST /v1/query/citations">JSON citations</button>
         <button type="button" id="btnRetrieveOnly" title="POST /v1/query/retrieve-only">Retrieve only</button>
       </div>
       <div class="err" id="queryErr"></div>
@@ -466,6 +474,23 @@
         <button type="button" id="btnCompareDocsStream" title="POST /v1/rag/compare-documents/stream">Stream (SSE)</button>
       </div>
       <pre class="sources" id="cmpOut" style="margin-top:0.65rem;display:none;max-height:320px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>RAG · cross-document summary (2–12 docs)</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;"><code>POST /v1/rag/cross-document-summary</code> — one synthesis memo across many indexed <code>doc_id</code> values (shared retrieval query).</p>
+      <label for="crossDocIds">doc_id list (one per line, 2–12 distinct)</label>
+      <textarea id="crossDocIds" placeholder="doc_id_one&#10;doc_id_two" style="min-height:72px;"></textarea>
+      <label for="crossRq" style="margin-top:0.65rem;">Retrieval query</label>
+      <input type="text" id="crossRq"
+        value="obligations representations warranty indemnity consideration governing law"
+        autocomplete="off" />
+      <label for="crossInstr" style="margin-top:0.65rem;">Instruction</label>
+      <textarea id="crossInstr" style="min-height:72px;">Synthesize tensions and alignments across the set; cite [n] only.</textarea>
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnCrossDocSummary">Synthesize across docs</button>
+      </div>
+      <pre class="sources" id="crossOut" style="margin-top:0.65rem;display:none;max-height:320px;"></pre>
     </div>
 
     <div class="card" style="margin-top:1rem;">
@@ -1007,6 +1032,20 @@
       }
     };
 
+    $("btnCheckpointSqlite").onclick = async () => {
+      try {
+        const out = await fetchJson("/v1/maintenance/checkpoint-sqlite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ truncate_wal: false }),
+        });
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
     $("btnOllamaShow").onclick = async () => {
       try {
         const model = $("ollamaShowModel").value.trim();
@@ -1015,6 +1054,22 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model }),
+        });
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnOllamaInspectBatch").onclick = async () => {
+      try {
+        const lines = $("ollamaInspectModels").value.split("\n").map((s) => s.trim()).filter(Boolean);
+        if (!lines.length) throw new Error("Enter at least one model name.");
+        const out = await fetchJson("/v1/ollama/models/inspect-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ models: lines.slice(0, 8) }),
         });
         $("metaOut").style.display = "block";
         $("metaOut").textContent = JSON.stringify(out, null, 2);
@@ -1283,6 +1338,35 @@
       }
     };
 
+    $("btnQueryCitations").onclick = async () => {
+      $("queryErr").textContent = "";
+      $("qaAnswer").style.display = "block";
+      $("qaSources").style.display = "block";
+      try {
+        const body = qaPayload();
+        if (!body.question) throw new Error("Enter a question.");
+        const out = await fetchJson("/v1/query/citations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        $("qaAnswer").textContent = out.answer_markdown || "";
+        $("qaSources").textContent = JSON.stringify(
+          {
+            citations: out.citations,
+            limitations: out.limitations,
+            structured: out.structured,
+            sources: out.sources,
+            retrieval_top_k: out.retrieval_top_k,
+          },
+          null,
+          2
+        );
+      } catch (e) {
+        $("queryErr").textContent = e.message || String(e);
+      }
+    };
+
     $("btnQuery").onclick = async () => {
       $("queryErr").textContent = "";
       $("qaAnswer").style.display = "none";
@@ -1478,6 +1562,27 @@
           if (ev.event === "token" && ev.text) acc += ev.text;
           $("cmpOut").textContent = acc;
         });
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnCrossDocSummary").onclick = async () => {
+      try {
+        const lines = $("crossDocIds").value.split("\n").map((s) => s.trim()).filter(Boolean);
+        if (lines.length < 2) throw new Error("Enter at least two distinct doc_id lines.");
+        const payload = {
+          doc_ids: lines.slice(0, 12),
+          retrieval_query: $("crossRq").value.trim() || "obligations terms",
+          instruction: $("crossInstr").value.trim() || "Synthesize across documents.",
+        };
+        const out = await fetchJson("/v1/rag/cross-document-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        $("crossOut").style.display = "block";
+        $("crossOut").textContent = JSON.stringify(out, null, 2);
       } catch (e) {
         alert(e.message || String(e));
       }

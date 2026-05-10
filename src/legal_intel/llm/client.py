@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Iterator
 from typing import Any
@@ -188,6 +189,14 @@ def chat_complete_json(
     system = _maybe_redact(system)
     user = _maybe_redact(user)
     if s.legal_intel_mock_llm:
+        if "ref_index" in system or "citations" in system.lower():
+            return json.dumps(
+                {
+                    "direct_answer": "[MOCK LLM] Grounded JSON answer placeholder.",
+                    "citations": [{"ref_index": 1, "relevance": "high", "quote": "mock excerpt"}],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real structured citations.",
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

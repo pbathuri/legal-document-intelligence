@@ -99,6 +99,7 @@ legal-api
    - `POST /v1/rag/document-summary/stream` — **SSE** (`text/event-stream`): initial **`sources`** event + synthesis token stream + **`done`** (same retrieval path as non-stream)
    - `POST /v1/rag/compare-documents` — retrieval from **two** **`doc_id`** values + specialist comparison (**`COMPARE_DOCUMENTS_SYSTEM`**); optional **`limit_per_document`**
    - `POST /v1/rag/compare-documents/stream` — **SSE**: **`sources`** for both sides + specialist comparison tokens + **`done`**
+   - `POST /v1/rag/cross-document-summary` — retrieval from **2–12** distinct **`doc_id`** values (shared **`retrieval_query`**) + one **synthesis** memo across labeled excerpts (**`CROSS_DOCUMENT_SUMMARIZE_SYSTEM`**); returns **`sources_by_doc_id`**
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
@@ -107,16 +108,19 @@ legal-api
    - `POST /v1/analyze` — full graph run; returns optional `run_id` when persistence enabled
    - `POST /v1/analyze/stream` — **SSE** (`text/event-stream`) LangGraph step updates + final merged state
    - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources); optional JSON **`limit`** (1–128) overrides **`RETRIEVAL_TOP_K`** for that call
+   - `POST /v1/query/citations` — same retrieval as **`/v1/query`**, but the LLM returns **JSON** with **`direct_answer`**, **`citations`** (`ref_index` ↔ chunk **`[n]`**), **`limitations`** (`json_object` / Ollama-compatible); exposes **`structured`** + flattened **`answer_markdown`**
    - `POST /v1/query/batch` — multiple grounded questions in one request (shared **`doc_id`** / **`limit`**; sequential specialist calls — fewer round trips for agent pipelines)
    - `POST /v1/query/retrieve-only/batch` — batch **`retrieve-only`** (no LLM; contexts + sources per question)
    - `POST /v1/query/retrieve-only` — same retrieval + **`formatted_context`** as `/v1/query`, but **no LLM** (sources + context only); supports **`limit`** override
    - `POST /v1/ollama/generate` — forwards non-streaming requests to Ollama’s native **`POST /api/generate`** (model, prompt, optional `system`, `options`; uses origin from `OLLAMA_BASE_URL`)
    - `POST /v1/ollama/chat` — Ollama **`POST /api/chat`** (multi-turn **`messages`**, non-streaming; optional **`options`** merge)
    - `POST /v1/ollama/show` — Ollama **`POST /api/show`** (inspect model template, parameters, etc.)
+   - `POST /v1/ollama/models/inspect-batch` — sequential **`/api/show`** for up to **8** model names (per-model success/error — agent/model introspection)
    - `GET /v1/system/snapshot` — Unix load averages + optional **psutil** top RSS processes (`top_n` query param)
    - `GET /v1/system/process` — this API worker’s **PID**, RSS, optional thread/cpu snapshot (**psutil**)
    - `POST /v1/maintenance/optimize-sqlite` — **`PRAGMA optimize`** on the runs DB when **`PERSIST_RUNS=1`** (planner stats / lightweight maintenance)
    - `POST /v1/maintenance/integrity-sqlite` — **`PRAGMA integrity_check`** on the runs DB when **`PERSIST_RUNS=1`**
+   - `POST /v1/maintenance/checkpoint-sqlite` — **`PRAGMA wal_checkpoint`** on the runs DB (JSON body **`truncate_wal`** optional); typically no-op unless journal mode is WAL
    - `POST /v1/maintenance/vacuum-sqlite` — runs **`VACUUM`** on the runs SQLite DB when **`PERSIST_RUNS=1`** (returns before/after file sizes)
 
 3. Point the **API base URL** in `index.html` (saved in browser localStorage) at your running server. Set `LEGAL_INTEL_CORS_ORIGINS` on the API if you restrict origins (default allows `*`).

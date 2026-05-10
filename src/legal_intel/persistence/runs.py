@@ -165,6 +165,33 @@ def optimize_sqlite_file(db_path: Path) -> dict[str, Any]:
     return {"path": str(db_path.resolve()), "pragma_optimize": True}
 
 
+def wal_checkpoint_sqlite(db_path: Path, *, truncate: bool = False) -> dict[str, Any]:
+    """Run ``PRAGMA wal_checkpoint`` on the runs DB (no-op if not in WAL journal mode)."""
+    db_path = Path(db_path)
+    if not db_path.is_file():
+        raise FileNotFoundError(str(db_path.resolve()))
+    mode = "TRUNCATE" if truncate else "PASSIVE"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        jm = conn.execute("PRAGMA journal_mode").fetchone()
+        journal_mode = str(jm[0]) if jm else ""
+        cur = conn.execute(f"PRAGMA wal_checkpoint({mode})")
+        row = cur.fetchone()
+        busy = log_pages = checkpointed = None
+        if row is not None and len(row) >= 3:
+            busy, log_pages, checkpointed = row[0], row[1], row[2]
+        return {
+            "path": str(db_path.resolve()),
+            "checkpoint_mode": mode,
+            "busy": busy,
+            "log_pages": log_pages,
+            "checkpointed_pages": checkpointed,
+            "journal_mode": journal_mode,
+        }
+    finally:
+        conn.close()
+
+
 def vacuum_sqlite_file(db_path: Path) -> dict[str, Any]:
     """Run SQLite VACUUM on the runs database (reclaim space / optimize pages)."""
     db_path = Path(db_path)
