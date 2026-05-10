@@ -1,0 +1,73 @@
+tests/test_api.py
+  s_c7571ff3b984be::t_b3f8fa187f2749 1-103
+index.html
+  s_c7571ff3b984be::t_2c1ac27a17a642 1-2,4-6,8,10-23,30,32-37,39,41,43,45,47-48,50,52-53,59,70,72-75,77,79,81,83,85,118,122-123,130,133-134,141,179,187,193,196,202-203,205,207,224,246-248,250-251,256-257,270,291,302-303,327-328,333-334,516
+  h_ec613b3074a81b 3,26-29,31,40,46,54,60,71,78,86-87,91,93-94,111-112,114-115,119,131,136-137,142,163-164,180,197,249,517
+  s_c7571ff3b984be::t_da17d184acf36f 7,9,24-25,38,42,44,49,51,55-58,61-69,76,80,82,84,88-90,92,95-110,113,116-117,120-121,124-129,132,135,138-140,143-162,165-178,181-186,188-192,194-195,198-201,204,206,208-223,225-245,252-255,258-269,271-290,292-301,304-326,329-332,335-515,518
+src/legal_intel/prompts.py
+  s_c7571ff3b984be::t_0f5fbe728cecff 30-34
+src/legal_intel/api/__init__.py
+  s_c7571ff3b984be::t_d62461600d12a3 1-5
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_a454e536666b7a 1-45
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_eb2c01ea78c774 40,43-44
+  s_c7571ff3b984be::t_922f1a2a57f45b 21
+  s_c7571ff3b984be::t_59c2704e9f8839 1-20,22-39,41-42,45-133
+vercel.json
+  s_c7571ff3b984be::t_7fff09a3fcff7b 1-19
+src/legal_intel/india/extraction.py
+  s_c7571ff3b984be::t_05c0e8a6a4f199 78-84
+  s_c7571ff3b984be::t_7ca65c1fbc30a6 96
+  s_c7571ff3b984be::t_456b45a73cb8f0 65-70
+src/legal_intel/llm/client.py
+  s_c7571ff3b984be::t_1af8510e8d0dba 10,23-72,113,115,121-122,141,143,149-152,155,159-170
+src/legal_intel/config.py
+  s_c7571ff3b984be::t_1106d0f6d12e03 20-21,25-28
+  s_c7571ff3b984be::t_88a937aa0773c9 9-10
+src/legal_intel/api/cli.py
+  s_c7571ff3b984be::t_1c761536c6d9c7 1-22
+src/legal_intel/graph/build.py
+  s_c7571ff3b984be::t_8fa96b74c4bb58 66
+  s_c7571ff3b984be::t_d3bea6b6aca785 263-275
+  s_c7571ff3b984be::t_c8ac4f1b9e3f4a 58
+  s_c7571ff3b984be::t_ffcb36a96a4e9a 42
+  s_c7571ff3b984be::t_d2c4533f480276 193
+  s_c7571ff3b984be::t_e50b47e46aed59 201
+  s_c7571ff3b984be::t_b088946140308d 230
+  s_c7571ff3b984be::t_c251dbbbb347ff 9
+  s_c7571ff3b984be::t_264fcdfd0c1574 185
+  s_c7571ff3b984be::t_a44d285705500f 78
+  s_c7571ff3b984be::t_325f57db4a4047 50
+README.md
+  s_c7571ff3b984be::t_654eefd0bc5e5d 53-93
+  s_c7571ff3b984be::t_6af4e932b6f1df 139-141
+  s_c7571ff3b984be::t_19f62bc293d3ba 17
+pyproject.toml
+  s_c7571ff3b984be::t_07145f1bd72a60 38-41
+  s_c7571ff3b984be::t_92abc20e7f4642 79
+.env.example
+  s_c7571ff3b984be::t_4ed631c58b1e28 1-5,10-13
+  s_c7571ff3b984be::t_59e1eb6a1b489d 25-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "ac7b4d8baf2462af53dc9317522b4b3226c9fc96",
+  "prompts": {},
+  "humans": {
+    "h_ec613b3074a81b": {
+      "author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
