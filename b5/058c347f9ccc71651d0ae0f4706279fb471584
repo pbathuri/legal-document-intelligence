@@ -1,0 +1,64 @@
+src/legal_intel/runtime/audit_log.py
+  s_c7571ff3b984be::t_d245d306c85259 1-19
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_8ac541bdfd30d6 90-107
+  s_c7571ff3b984be::t_282d425955eddd 49-50
+  s_c7571ff3b984be::t_58cf761d339ae5 165
+  s_c7571ff3b984be::t_e55e9bcbfbf67f 323-358
+  s_c7571ff3b984be::t_3da6b8b8e0ea96 437-448
+  s_c7571ff3b984be::t_0450368743f4f3 37
+  s_c7571ff3b984be::t_aad36b179705d7 677-685
+  s_c7571ff3b984be::t_4ba41d521cbaed 23
+  s_c7571ff3b984be::t_597f983b7a0fc4 83
+  s_c7571ff3b984be::t_dc21c06a19df6d 193-217,221
+  s_c7571ff3b984be::t_877133b94228fa 271-280,291-298
+src/legal_intel/runtime/device_profile.py
+  s_c7571ff3b984be::t_84cf46a6302bda 33-41
+src/legal_intel/runtime/build_info.py
+  s_c7571ff3b984be::t_92b2705587fc20 1-31
+README.md
+  s_c7571ff3b984be::t_1432fa3817d953 117-118
+  s_c7571ff3b984be::t_07c5f72d160e0c 85
+  s_c7571ff3b984be::t_caabb54f5b61f4 69-71,73
+  s_c7571ff3b984be::t_b5d377d7a18255 76
+  s_c7571ff3b984be::t_7502b1f60714bb 78
+src/legal_intel/runtime/api_metrics.py
+  s_c7571ff3b984be::t_2a1f6bd04184e5 41-55
+index.html
+  s_c7571ff3b984be::t_1afa9ca8403451 294,296
+  s_c7571ff3b984be::t_70ec5254b7eb05 532-540,550-554
+  s_c7571ff3b984be::t_6673110ddeec5e 285-287
+  s_c7571ff3b984be::t_66f9a70672f542 568-595
+src/legal_intel/config.py
+  s_c7571ff3b984be::t_db236c686c51b0 83-84
+src/legal_intel/runtime/gpu_probe.py
+  s_c7571ff3b984be::t_2717e55ff10e7c 1-44
+src/legal_intel/persistence/runs.py
+  s_c7571ff3b984be::t_2597777aef1e54 147-178
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_a6d236875d7d4d 30-35
+.env.example
+  s_c7571ff3b984be::t_32d1283065a49c 46-51
+tests/test_api.py
+  s_c7571ff3b984be::t_b0246380910a1d 481
+  s_c7571ff3b984be::t_0abfd0db9ec97e 389-393,395-480,482-484
+  s_c7571ff3b984be::t_3b3443b90841fd 394
+src/legal_intel/rag/store.py
+  s_c7571ff3b984be::t_c6f0b532978f55 197-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "b5058c347f9ccc71651d0ae0f4706279fb471584",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
