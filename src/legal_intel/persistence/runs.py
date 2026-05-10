@@ -8,6 +8,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any
 
 
@@ -93,6 +94,45 @@ def list_runs(*, db_path: Path, limit: int = 50) -> list[RunSummary]:
             )
         )
     return out
+
+
+def delete_run(*, db_path: Path, run_id: str) -> bool:
+    conn = _connect(db_path)
+    try:
+        init_schema(conn)
+        cur = conn.execute("DELETE FROM diligence_runs WHERE id = ?", (run_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def iter_runs_ndjson_lines(*, db_path: Path, limit: int = 50_000) -> Iterator[str]:
+    """Export rows as newline-delimited JSON (oldest first for stable archival)."""
+    conn = _connect(db_path)
+    try:
+        init_schema(conn)
+        cur = conn.execute(
+            """
+            SELECT id, created_at, domain, query, doc_ids_json, result_json
+            FROM diligence_runs
+            ORDER BY created_at ASC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        for row in cur:
+            obj = {
+                "id": row["id"],
+                "created_at": row["created_at"],
+                "domain": row["domain"],
+                "query": row["query"],
+                "doc_ids": json.loads(row["doc_ids_json"]),
+                "result": json.loads(row["result_json"]),
+            }
+            yield json.dumps(obj, default=str) + "\n"
+    finally:
+        conn.close()
 
 
 def get_run(*, db_path: Path, run_id: str) -> dict[str, Any] | None:

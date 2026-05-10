@@ -187,10 +187,97 @@ def test_persist_run(tmp_path, monkeypatch):
 def test_runtime(api_client):
     r = api_client.get("/v1/runtime")
     assert r.status_code == 200
-    assert "python_version" in r.json()
+    body = r.json()
+    assert "python_version" in body
+    assert "device" in body and body["device"].get("hostname")
 
 
 def test_disk(api_client):
     r = api_client.get("/v1/disk")
     assert r.status_code == 200
     assert "free_bytes" in r.json()
+
+
+def test_effective_settings_redacts(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value-do-not-leak")
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("PERSIST_UPLOADS", "0")
+    monkeypatch.setenv("PERSIST_RUNS", "0")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.get("/v1/settings/effective")
+        assert r.status_code == 200
+        assert r.json().get("openai_api_key") == "***"
+    get_settings.cache_clear()
+
+
+def test_qdrant_info(api_client):
+    r = api_client.get("/v1/qdrant/info")
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("exists") is True
+
+
+def test_batch_ingest_two_pdfs(api_client):
+    import fitz
+
+    buf = io.BytesIO()
+    doc = fitz.open()
+    doc.new_page().insert_text((40, 72), "Batch contract clause one.")
+    doc.save(buf)
+    doc.close()
+    pdf_bytes = buf.getvalue()
+    files = [
+        ("files", ("one.pdf", pdf_bytes, "application/pdf")),
+        ("files", ("two.pdf", pdf_bytes, "application/pdf")),
+    ]
+    r = api_client.post("/v1/ingest/batch", files=files)
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["items"]) == 2
+    assert data["errors"] == []
+    assert data["items"][0]["page_count"] is not None
+
+
+def test_export_delete_run(tmp_path, monkeypatch):
+    db = tmp_path / "exp.db"
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_RUNS", "1")
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("PERSIST_UPLOADS", "0")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="ex1",
+        doc_label="z.pdf",
+        chunks=[("Clause X.", {"page_start": 1, "page_end": 1})],
+    )
+    with TestClient(app) as client:
+        ar = client.post(
+            "/v1/analyze",
+            json={"query": "Any clause?", "domain": "mna"},
+        )
+        rid = ar.json()["run_id"]
+        exp = client.get("/v1/runs/export")
+        assert exp.status_code == 200
+        assert rid in exp.text
+        dr = client.delete(f"/v1/runs/{rid}")
+        assert dr.status_code == 200
+        gr = client.get(f"/v1/runs/{rid}")
+        assert gr.status_code == 404
+    get_settings.cache_clear()

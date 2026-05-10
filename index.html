@@ -277,8 +277,11 @@
       <div class="row">
         <button type="button" id="btnRuntime">Runtime</button>
         <button type="button" id="btnAgents">Agent manifest</button>
+        <button type="button" id="btnSettings">Effective settings</button>
+        <button type="button" id="btnQdrant">Qdrant info</button>
         <button type="button" id="btnDisk">Disk space</button>
         <button type="button" id="btnRuns">Recent runs</button>
+        <button type="button" id="btnExportRuns">Export runs (NDJSON)</button>
       </div>
       <pre class="sources" id="metaOut" style="margin-top:0.65rem;max-height:220px;display:none;"></pre>
     </div>
@@ -490,6 +493,33 @@
         const r = await fetchJson("/v1/runs");
         $("metaOut").style.display = "block";
         $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnSettings").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/settings/effective");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnQdrant").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/qdrant/info");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnExportRuns").onclick = async () => {
+      try {
+        const base = ($("apiBase").value || "").trim().replace(/\/$/, "");
+        if (!base) throw new Error("Set API base URL first.");
+        window.open(base + "/v1/runs/export", "_blank");
       } catch (e) {
         alert(e.message || String(e));
       }

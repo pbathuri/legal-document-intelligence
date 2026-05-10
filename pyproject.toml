@@ -60,6 +60,9 @@ training = [
     "transformers>=4.44.0",
     "pyarrow>=14.0.0",
 ]
+device = [
+    "psutil>=5.9.0",
+]
 observability = [
     # Langfuse's CallbackHandler imports the `langchain` package (v1 uses langchain-core under the hood).
     "langfuse>=2.0.0",

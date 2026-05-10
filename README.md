@@ -68,9 +68,12 @@ legal-api
    - `GET /health` — mock/live LLM, Qdrant, resolved multimodel names; when `LLM_PROVIDER=ollama`, lists models from local **Ollama** `/api/tags`
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local)
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
-   - `GET /v1/runs` / `GET /v1/runs/{id}` — SQLite-backed diligence history (`PERSIST_RUNS`, `RUNS_DB_PATH`)
+   - `GET /v1/runs` / `GET /v1/runs/export` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history + NDJSON export (route order-safe)
    - `GET /v1/disk` — free space on volume holding upload storage
-   - `POST /v1/ingest` — multipart PDF → `{ doc_id, doc_label, chunks, persisted_path? }` (optional on-disk copy under `UPLOAD_STORAGE_DIR`)
+   - `GET /v1/settings/effective` — full resolved config with **secrets redacted**
+   - `GET /v1/qdrant/info` — collection existence + point count (uses same client as RAG, including in-process `:memory:`)
+   - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
+   - `POST /v1/ingest/batch` — many PDFs in one request → `{ items[], errors[] }`
    - `POST /v1/analyze` — full graph run; returns optional `run_id` when persistence enabled
    - `POST /v1/analyze/stream` — **SSE** (`text/event-stream`) LangGraph step updates + final merged state
    - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources)
@@ -95,6 +98,10 @@ legal-api
 ```
 
 Environment names map to `llm_provider`, `ollama_base_url`, `llm_model_*` in [`src/legal_intel/config.py`](src/legal_intel/config.py) (`LLM_PROVIDER`, `OLLAMA_BASE_URL`, etc.).
+
+**Optional host metrics**: `pip install -e ".[device]"` installs `psutil` for RAM/disk detail in [`GET /v1/runtime`](src/legal_intel/runtime/device_profile.py) (`device` object).
+
+**Health warnings**: When `LLM_PROVIDER=ollama`, `/health` compares routed models to `ollama_models` from `/api/tags` and lists actionable warnings (e.g. run `ollama pull`).
 
 ## Production-shaped stack (MI300X + vLLM)
 

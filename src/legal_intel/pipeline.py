@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any
 
 from legal_intel.config import get_settings
 from legal_intel.ingest.pdf_loader import (
@@ -27,14 +28,14 @@ def doc_id_from_pdf_bytes(content: bytes, doc_label: str) -> str:
     return f"{safe}_{h}"
 
 
-def ingest_pdf(
+def ingest_pdf_with_stats(
     path: str,
     *,
     doc_label: str | None = None,
     use_ocr: bool = False,
     doc_id: str | None = None,
-) -> tuple[str, int]:
-    """Load PDF, chunk, embed, and upsert into Qdrant. Returns (doc_id, num_chunks)."""
+) -> tuple[str, int, dict[str, Any]]:
+    """Same as ``ingest_pdf`` plus ingest statistics for APIs and observability."""
     s = get_settings()
     label = doc_label or Path(path).name
     resolved_id = doc_id or _doc_id_from_path(path)
@@ -82,4 +83,26 @@ def ingest_pdf(
         tuples.append((c.text, extra))
     n = store.upsert_document_chunks(
         doc_id=resolved_id, doc_label=label, chunks=tuples)
-    return resolved_id, n
+    stats: dict[str, Any] = {
+        "page_count": page_count,
+        "char_count": len(text),
+        "text_empty": not bool(text.strip()),
+    }
+    return resolved_id, n, stats
+
+
+def ingest_pdf(
+    path: str,
+    *,
+    doc_label: str | None = None,
+    use_ocr: bool = False,
+    doc_id: str | None = None,
+) -> tuple[str, int]:
+    """Load PDF, chunk, embed, and upsert into Qdrant. Returns (doc_id, num_chunks)."""
+    doc_id_out, n, _stats = ingest_pdf_with_stats(
+        path,
+        doc_label=doc_label,
+        use_ocr=use_ocr,
+        doc_id=doc_id,
+    )
+    return doc_id_out, n

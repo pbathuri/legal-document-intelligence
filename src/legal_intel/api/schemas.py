@@ -25,6 +25,14 @@ class IngestResponse(BaseModel):
     doc_label: str
     chunks: int
     persisted_path: str | None = None
+    page_count: int | None = None
+    char_count: int | None = None
+    text_empty: bool | None = None
+
+
+class BatchIngestResponse(BaseModel):
+    items: list[IngestResponse]
+    errors: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
@@ -41,6 +49,7 @@ class HealthResponse(BaseModel):
     upload_storage_dir: str | None = None
     persist_runs: bool = False
     runs_db_path: str | None = None
+    warnings: list[str] = Field(default_factory=list)
 
 
 class AnalyzeResponse(BaseModel):
@@ -70,3 +79,4 @@ class RuntimeOut(BaseModel):
     runs_db: str
     ollama_base_url: str
     qdrant_url: str
+    device: dict[str, Any] | None = None

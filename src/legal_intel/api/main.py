@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from legal_intel.api.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
+    BatchIngestResponse,
     HealthResponse,
     IngestResponse,
     QueryRequest,
@@ -26,14 +27,22 @@ from legal_intel.api.schemas import (
 from legal_intel.config import get_settings
 from legal_intel.graph.build import run_diligence_for_domain, stream_diligence_for_domain
 from legal_intel.llm.client import chat_complete, chat_stream, resolve_model_for_task
-from legal_intel.persistence.runs import get_run, insert_run, list_runs
-from legal_intel.pipeline import doc_id_from_pdf_bytes, ingest_pdf
+from legal_intel.persistence.runs import (
+    delete_run,
+    get_run,
+    insert_run,
+    iter_runs_ndjson_lines,
+    list_runs,
+)
+from legal_intel.pipeline import doc_id_from_pdf_bytes, ingest_pdf_with_stats
 from legal_intel.prompts import QUERY_SYSTEM, format_context_block
 from legal_intel.rag.store import LegalVectorStore
+from legal_intel.runtime.device_profile import gather_device_profile
 from legal_intel.runtime.ollama_probe import (
     fetch_ollama_model_names,
     ollama_origin_from_openai_base,
 )
+from legal_intel.runtime.ollama_warnings import build_ollama_model_warnings
 from legal_intel.runtime.uploads import persist_pdf_bytes
 
 
@@ -48,11 +57,78 @@ def _sse_payload(data: dict[str, Any]) -> str:
     return "data: " + json.dumps(data, default=str) + "\n\n"
 
 
+def _public_settings_dict() -> dict[str, Any]:
+    s = get_settings()
+    d = s.model_dump(mode="json")
+    for key in (
+        "openai_api_key",
+        "langfuse_secret_key",
+        "langfuse_public_key",
+        "indian_kanoon_api_token",
+    ):
+        if d.get(key):
+            d[key] = "***"
+    return d
+
+
+async def _ingest_pdf_core(content: bytes, filename: str, use_ocr: bool) -> IngestResponse:
+    if not filename:
+        raise HTTPException(status_code=400, detail="Missing filename")
+    if Path(filename).suffix.lower() != ".pdf":
+        raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    s = get_settings()
+    stable_doc_id = doc_id_from_pdf_bytes(content, filename)
+    persisted: str | None = None
+    tmp_path: str | None = None
+
+    try:
+        if s.persist_uploads:
+            path, _manifest = persist_pdf_bytes(
+                content=content,
+                doc_id=stable_doc_id,
+                original_filename=filename,
+                storage_dir=s.upload_storage_dir,
+            )
+            persisted = str(path.resolve())
+            doc_id_out, n_chunks, stats = ingest_pdf_with_stats(
+                str(path),
+                doc_label=filename,
+                use_ocr=use_ocr,
+                doc_id=stable_doc_id,
+            )
+        else:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            doc_id_out, n_chunks, stats = ingest_pdf_with_stats(
+                tmp_path,
+                doc_label=filename,
+                use_ocr=use_ocr,
+                doc_id=stable_doc_id,
+            )
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    return IngestResponse(
+        doc_id=doc_id_out,
+        doc_label=filename,
+        chunks=n_chunks,
+        persisted_path=persisted,
+        page_count=stats["page_count"],
+        char_count=stats["char_count"],
+        text_empty=stats["text_empty"],
+    )
+
+
 app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.4.0",
+    version="0.5.0",
 )
 
 _origins = _cors_origins()
@@ -81,6 +157,8 @@ def health() -> HealthResponse:
         except Exception as e:
             o_err = str(e)
 
+    warns = build_ollama_model_warnings(s, o_models or [])
+
     return HealthResponse(
         status="ok",
         mock_llm=s.legal_intel_mock_llm,
@@ -100,6 +178,7 @@ def health() -> HealthResponse:
         upload_storage_dir=s.upload_storage_dir,
         persist_runs=s.persist_runs,
         runs_db_path=s.runs_db_path,
+        warnings=warns,
     )
 
 
@@ -114,7 +193,14 @@ def runtime_info() -> RuntimeOut:
         runs_db=str(Path(s.runs_db_path).resolve()),
         ollama_base_url=s.ollama_base_url,
         qdrant_url=s.qdrant_url,
+        device=gather_device_profile(),
     )
+
+
+@app.get("/v1/settings/effective")
+def effective_settings() -> dict[str, Any]:
+    """Resolved configuration with secrets redacted (safe for screenshots)."""
+    return _public_settings_dict()
 
 
 @app.get("/v1/agents")
@@ -174,6 +260,21 @@ def list_diligence_runs(limit: int = 40) -> list[RunSummaryOut]:
     ]
 
 
+@app.get("/v1/runs/export")
+def export_runs_ndjson(limit: int = 50_000):
+    s = get_settings()
+    if not s.persist_runs:
+        raise HTTPException(status_code=400, detail="Run persistence disabled")
+
+    def gen():
+        yield from iter_runs_ndjson_lines(
+            db_path=Path(s.runs_db_path),
+            limit=min(limit, 500_000),
+        )
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
 @app.get("/v1/runs/{run_id}")
 def get_diligence_run(run_id: str) -> dict[str, Any]:
     s = get_settings()
@@ -190,56 +291,69 @@ async def ingest_upload(
     file: UploadFile = File(...),
     use_ocr: bool = False,
 ) -> IngestResponse:
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Missing filename")
-    suffix = Path(file.filename).suffix.lower()
-    if suffix != ".pdf":
-        raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
-
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty file")
+    return await _ingest_pdf_core(content, file.filename or "", use_ocr)
 
+
+@app.post("/v1/ingest/batch", response_model=BatchIngestResponse)
+async def ingest_batch(
+    files: list[UploadFile] = File(...),
+    use_ocr: bool = False,
+) -> BatchIngestResponse:
+    """Upload many PDFs in one multipart request (partial success: ``items`` + ``errors``)."""
+    items: list[IngestResponse] = []
+    errors: list[dict[str, Any]] = []
+    for f in files:
+        try:
+            raw = await f.read()
+            items.append(await _ingest_pdf_core(raw, f.filename or "unnamed.pdf", use_ocr))
+        except HTTPException as he:
+            detail = he.detail
+            if isinstance(detail, list):
+                detail = str(detail)
+            errors.append({"filename": f.filename, "detail": detail})
+        except Exception as e:
+            errors.append({"filename": f.filename, "detail": str(e)})
+    return BatchIngestResponse(items=items, errors=errors)
+
+
+@app.delete("/v1/runs/{run_id}")
+def delete_diligence_run(run_id: str) -> dict[str, Any]:
     s = get_settings()
-    doc_id = doc_id_from_pdf_bytes(content, file.filename)
-    persisted: str | None = None
-    tmp_path: str | None = None
+    if not s.persist_runs:
+        raise HTTPException(status_code=400, detail="Run persistence disabled")
+    ok = delete_run(db_path=Path(s.runs_db_path), run_id=run_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"deleted": True, "id": run_id}
 
+
+@app.get("/v1/qdrant/info")
+def qdrant_collection_info() -> dict[str, Any]:
+    """Inspect the same vector store client used for RAG (includes shared :memory: singleton)."""
+    s = get_settings()
+    name = s.qdrant_collection
     try:
-        if s.persist_uploads:
-            path, _manifest = persist_pdf_bytes(
-                content=content,
-                doc_id=doc_id,
-                original_filename=file.filename,
-                storage_dir=s.upload_storage_dir,
-            )
-            persisted = str(path.resolve())
-            n_doc, n_chunks = ingest_pdf(
-                str(path),
-                doc_label=file.filename,
-                use_ocr=use_ocr,
-                doc_id=doc_id,
-            )
-        else:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(content)
-                tmp_path = tmp.name
-            n_doc, n_chunks = ingest_pdf(
-                tmp_path,
-                doc_label=file.filename,
-                use_ocr=use_ocr,
-                doc_id=doc_id,
-            )
-    finally:
-        if tmp_path:
-            Path(tmp_path).unlink(missing_ok=True)
-
-    return IngestResponse(
-        doc_id=n_doc,
-        doc_label=file.filename,
-        chunks=n_chunks,
-        persisted_path=persisted,
-    )
+        store = LegalVectorStore()
+        client = store._client
+        exists = client.collection_exists(name)
+        info = client.get_collection(name) if exists else None
+        points = None
+        if exists:
+            try:
+                cnt = client.count(collection_name=name, exact=True)
+                points = getattr(cnt, "count", cnt)
+            except Exception:
+                points = None
+        return {
+            "qdrant_url_setting": s.qdrant_url,
+            "collection": name,
+            "exists": exists,
+            "points_count": points,
+            "status": getattr(info, "status", None) if info else None,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Qdrant unreachable: {e}") from e
 
 
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
