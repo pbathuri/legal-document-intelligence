@@ -716,3 +716,129 @@ def test_ollama_generate_proxied(monkeypatch):
             assert r.status_code == 200
             assert r.json().get("response") == "generated-body"
     get_settings.cache_clear()
+
+
+def test_embeddings_info(api_client):
+    r = api_client.get("/v1/embeddings/info")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["dimension"] > 0
+    assert body["embedding_provider"] == "sentence_transformers"
+    assert "probe_encode_seconds" in body
+
+
+def test_ollama_version_mocked(monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from unittest.mock import patch
+
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with patch(
+        "legal_intel.api.main.ollama_native_version",
+        return_value={"version": "0.0.0-test"},
+    ):
+        with TestClient(app) as client:
+            r = client.get("/v1/ollama/version")
+            assert r.status_code == 200
+            assert r.json().get("version") == "0.0.0-test"
+    get_settings.cache_clear()
+
+
+def test_ollama_chat_stream_rejected(api_client):
+    r = api_client.post(
+        "/v1/ollama/chat",
+        json={
+            "model": "m",
+            "messages": [{"role": "user", "content": "x"}],
+            "stream": True,
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_ollama_chat_proxied(monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from unittest.mock import patch
+
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with patch(
+        "legal_intel.api.main.ollama_native_chat",
+        return_value={"message": {"role": "assistant", "content": "pong"}},
+    ):
+        with TestClient(app) as client:
+            r = client.post(
+                "/v1/ollama/chat",
+                json={
+                    "model": "any",
+                    "messages": [{"role": "user", "content": "ping"}],
+                },
+            )
+            assert r.status_code == 200
+            assert r.json()["message"]["content"] == "pong"
+    get_settings.cache_clear()
+
+
+def test_near_duplicate_chunks(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="dupx",
+        doc_label="x.pdf",
+        chunks=[
+            ("The indemnity clause caps liability at five million dollars.", {"chunk_index": 0}),
+            ("The indemnity clause caps liability at five million dollars.", {"chunk_index": 1}),
+        ],
+    )
+    r = api_client.post(
+        "/v1/rag/near-duplicate-chunks",
+        json={"doc_id": "dupx", "min_similarity": 0.85},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["chunks_scanned"] >= 2
+    assert len(body["pairs"]) >= 1
+
+
+def test_optimize_sqlite(tmp_path, monkeypatch):
+    db = tmp_path / "opt.db"
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_RUNS", "1")
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+    from legal_intel.persistence.runs import insert_run
+
+    insert_run(
+        db_path=db,
+        domain="mna",
+        query="q",
+        doc_ids=[],
+        result={"final_report": "x"},
+    )
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.post("/v1/maintenance/optimize-sqlite")
+        assert r.status_code == 200
+        assert r.json().get("pragma_optimize") is True
+    get_settings.cache_clear()

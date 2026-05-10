@@ -28,6 +28,8 @@ from legal_intel.api.schemas import (
     HealthResponse,
     IngestResponse,
     LocalPathIngestRequest,
+    NearDuplicateChunksRequest,
+    OllamaChatRequest,
     OllamaGenerateRequest,
     OllamaShowRequest,
     QueryRequest,
@@ -47,6 +49,7 @@ from legal_intel.persistence.runs import (
     insert_run,
     iter_runs_ndjson_lines,
     list_runs,
+    optimize_sqlite_file,
     search_runs,
     vacuum_sqlite_file,
 )
@@ -58,9 +61,12 @@ from legal_intel.runtime.api_metrics import incr_request as metrics_incr_request
 from legal_intel.runtime.audit_log import append_audit_event
 from legal_intel.runtime.build_info import gather_build_info
 from legal_intel.runtime.device_profile import gather_device_profile
+from legal_intel.runtime.chunk_near_duplicate import near_duplicate_chunk_pairs
 from legal_intel.runtime.embedding_similarity import similarity_for_text_pair
+from legal_intel.runtime.ollama_chat_proxy import ollama_native_chat
 from legal_intel.runtime.ollama_generate_proxy import ollama_native_generate
 from legal_intel.runtime.ollama_show_proxy import ollama_native_show
+from legal_intel.runtime.ollama_version_proxy import ollama_native_version
 from legal_intel.runtime.system_snapshot import gather_system_snapshot
 from legal_intel.runtime.local_paths import is_path_under_allowlist, parse_allow_prefixes
 from legal_intel.runtime.ollama_probe import (
@@ -108,6 +114,7 @@ def _audit_prefixes() -> tuple[str, ...]:
         "/v1/documents",
         "/v1/runs",
         "/v1/embeddings",
+        "/v1/rag",
         "/v1/llm",
         "/v1/ollama",
         "/v1/maintenance",
@@ -201,7 +208,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.10.0",
+    version="0.11.0",
 )
 
 _origins = _cors_origins()
@@ -360,6 +367,25 @@ def ollama_host_probe() -> dict[str, Any]:
     )
 
 
+@app.get("/v1/embeddings/info")
+def embeddings_backend_info() -> dict[str, Any]:
+    """Resolved embedding provider/model names + dimension + one probe encode timing (device-local)."""
+    s = get_settings()
+    from legal_intel.rag.embeddings import make_embedding_model
+
+    m = make_embedding_model()
+    t0 = time.perf_counter()
+    _ = m.encode(["legal_intel.embedding.info.probe."])
+    dt = time.perf_counter() - t0
+    return {
+        "embedding_provider": s.embedding_provider,
+        "embedding_model": s.embedding_model,
+        "ollama_embedding_model": s.ollama_embedding_model,
+        "dimension": m.dimension,
+        "probe_encode_seconds": round(dt, 4),
+    }
+
+
 @app.post("/v1/embeddings/warmup")
 def embeddings_warmup() -> dict[str, Any]:
     """Force-load the configured embedding backend (ST download or Ollama /api/embed)."""
@@ -454,6 +480,19 @@ def llm_route_probe() -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
+@app.get("/v1/ollama/version")
+def ollama_daemon_version() -> dict[str, Any]:
+    """Native ``GET /api/version`` from the Ollama process (daemon build metadata)."""
+    s = get_settings()
+    try:
+        return ollama_native_version(
+            s.ollama_base_url,
+            timeout_seconds=max(10.0, s.ollama_probe_timeout_seconds * 5),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
 @app.post("/v1/ollama/generate")
 def ollama_generate_native(body: OllamaGenerateRequest) -> dict[str, Any]:
     """
@@ -485,6 +524,32 @@ def ollama_generate_native(body: OllamaGenerateRequest) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
+@app.post("/v1/ollama/chat")
+def ollama_chat_native(body: OllamaChatRequest) -> dict[str, Any]:
+    """Native Ollama ``POST /api/chat`` — multi-turn messages (non-streaming)."""
+    if body.stream:
+        raise HTTPException(
+            status_code=400, detail="Set stream=false; streaming not supported here."
+        )
+    s = get_settings()
+    payload: dict[str, Any] = {
+        "model": body.model.strip(),
+        "messages": [m.model_dump() for m in body.messages],
+        "stream": False,
+    }
+    payload.update(body.options)
+    try:
+        return ollama_native_chat(
+            s.ollama_base_url,
+            payload,
+            timeout_seconds=max(120.0, s.ollama_probe_timeout_seconds * 60),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
 @app.post("/v1/ollama/show")
 def ollama_show_model(body: OllamaShowRequest) -> dict[str, Any]:
     """Native Ollama ``POST /api/show`` — model parameters, template, license (local daemon)."""
@@ -505,6 +570,20 @@ def ollama_show_model(body: OllamaShowRequest) -> dict[str, Any]:
 def system_snapshot(top_n: int = 8) -> dict[str, Any]:
     """Load averages (Unix) + optional psutil top RSS processes."""
     return gather_system_snapshot(top_n=min(max(top_n, 1), 32))
+
+
+@app.post("/v1/maintenance/optimize-sqlite")
+def maintenance_optimize_runs_db() -> dict[str, Any]:
+    """SQLite ``PRAGMA optimize`` on the runs database (requires ``persist_runs``)."""
+    s = get_settings()
+    if not s.persist_runs:
+        raise HTTPException(status_code=400, detail="Run persistence disabled")
+    try:
+        return optimize_sqlite_file(Path(s.runs_db_path))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/v1/maintenance/vacuum-sqlite")
@@ -851,6 +930,25 @@ def purge_documents_batch(body: DocumentPurgeBatchRequest) -> dict[str, Any]:
     counts = store.delete_document_vectors_batch(body.doc_ids)
     total = sum(counts.values())
     return {"vectors_removed_total": total, "by_doc_id": counts}
+
+
+@app.post("/v1/rag/near-duplicate-chunks")
+def rag_near_duplicate_chunks(body: NearDuplicateChunksRequest) -> dict[str, Any]:
+    """
+    Pairwise cosine similarity over chunk texts within one ``doc_id`` (bounded ``max_chunks``).
+    Uses the same embedding backend as ingestion/RAG — ideal for duplicate-page / OCR overlap QA.
+    """
+    try:
+        return near_duplicate_chunk_pairs(
+            doc_id=body.doc_id.strip(),
+            min_similarity=body.min_similarity,
+            max_chunks=body.max_chunks,
+            max_pairs=body.max_pairs,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
 
 @app.post("/v1/analyze", response_model=AnalyzeResponse)

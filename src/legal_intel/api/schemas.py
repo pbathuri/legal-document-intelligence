@@ -141,6 +141,34 @@ class OllamaShowRequest(BaseModel):
     model: str = Field(..., min_length=1)
 
 
+class ChatMessage(BaseModel):
+    """Single turn in Ollama native chat format."""
+
+    role: Literal["system", "user", "assistant"] = "user"
+    content: str = Field(..., min_length=1, max_length=200_000)
+
+
+class OllamaChatRequest(BaseModel):
+    """Forward to Ollama ``POST /api/chat`` (non-streaming). Same origin as ``OLLAMA_BASE_URL``."""
+
+    model: str = Field(..., min_length=1)
+    messages: list[ChatMessage] = Field(..., min_length=1, max_length=64)
+    stream: bool = False
+    options: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Merged into the JSON body (temperature, num_ctx, etc.).",
+    )
+
+
+class NearDuplicateChunksRequest(BaseModel):
+    """Find high-similarity chunk pairs within one indexed ``doc_id`` (debug / dedup QA)."""
+
+    doc_id: str = Field(..., min_length=1)
+    min_similarity: float = Field(default=0.92, ge=0.5, le=1.0)
+    max_chunks: int = Field(default=48, ge=2, le=64)
+    max_pairs: int = Field(default=40, ge=1, le=200)
+
+
 class RunSummaryOut(BaseModel):
     id: str
     created_at: str

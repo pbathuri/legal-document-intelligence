@@ -293,6 +293,8 @@
         <button type="button" id="btnIndexedDocs">Indexed documents</button>
         <button type="button" id="btnManifest">Upload manifest</button>
         <button type="button" id="btnWarmupEmbed">Warmup embeddings</button>
+        <button type="button" id="btnEmbInfo" title="GET /v1/embeddings/info">Embeddings info</button>
+        <button type="button" id="btnOllamaVer" title="GET /v1/ollama/version">Ollama version</button>
         <button type="button" id="btnSearchRuns">Search runs</button>
         <button type="button" id="btnExportRunsJson">Export runs (JSON)</button>
         <button type="button" id="btnExportRuns">Export runs (NDJSON)</button>
@@ -300,6 +302,7 @@
         <button type="button" id="btnMemoRun">Open run memo (.md)</button>
         <button type="button" id="btnSysSnap" title="GET /v1/system/snapshot">System snapshot</button>
         <button type="button" id="btnVacuumSqlite" title="POST /v1/maintenance/vacuum-sqlite">Vacuum runs DB</button>
+        <button type="button" id="btnOptimizeSqlite" title="POST /v1/maintenance/optimize-sqlite">Optimize runs DB</button>
       </div>
       <div class="row" style="margin-top:0.65rem;">
         <label for="ollamaShowModel" style="margin:0;align-self:center;">Ollama model inspect</label>
@@ -415,6 +418,32 @@
         <button type="button" class="primary" id="btnOllamaNativeGen">Generate</button>
       </div>
       <pre class="sources" id="ollamaGenOut" style="margin-top:0.65rem;display:none;max-height:280px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>Ollama native chat</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;"><code>POST /v1/ollama/chat</code> — multi-turn messages (non-streaming). Uses your local daemon.</p>
+      <label for="ochatModel">Model</label>
+      <input type="text" id="ochatModel" placeholder="e.g. llama3.2" autocomplete="off" />
+      <label for="ochatMessages" style="margin-top:0.65rem;">Messages (JSON array)</label>
+      <textarea id="ochatMessages" style="min-height:88px;">[{"role":"user","content":"Reply with one word: pong"}]</textarea>
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnOllamaChat">Send chat</button>
+      </div>
+      <pre class="sources" id="ochatOut" style="margin-top:0.65rem;display:none;max-height:280px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>RAG · near-duplicate chunks</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;">Pairwise cosine similarity within one indexed <code>doc_id</code> (<code>POST /v1/rag/near-duplicate-chunks</code>). Uses the same embeddings as ingestion.</p>
+      <label for="ndDocId">doc_id</label>
+      <input type="text" id="ndDocId" placeholder="Indexed document id from ingest" autocomplete="off" />
+      <label for="ndMinSim" style="margin-top:0.65rem;">Minimum similarity (0.5–1)</label>
+      <input type="number" id="ndMinSim" min="0.5" max="1" step="0.01" value="0.88" style="max-width:10rem;" />
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnNearDup">Scan chunk pairs</button>
+      </div>
+      <pre class="sources" id="ndOut" style="margin-top:0.65rem;display:none;max-height:260px;"></pre>
     </div>
 
     <p class="footer-note">
@@ -744,6 +773,24 @@
         alert(e.message || String(e));
       }
     };
+    $("btnEmbInfo").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/embeddings/info");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnOllamaVer").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/ollama/version");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
     $("btnSearchRuns").onclick = async () => {
       try {
         const q = window.prompt("Substring to search (query, domain, run id)", "") || "";
@@ -780,6 +827,27 @@
     $("btnVacuumSqlite").onclick = async () => {
       try {
         const res = await fetch(apiUrl("/v1/maintenance/vacuum-sqlite"), { method: "POST" });
+        const text = await res.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = { raw: text };
+        }
+        if (!res.ok) {
+          const detail = data?.detail || data?.message || text || res.statusText;
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        }
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnOptimizeSqlite").onclick = async () => {
+      try {
+        const res = await fetch(apiUrl("/v1/maintenance/optimize-sqlite"), { method: "POST" });
         const text = await res.text();
         let data = null;
         try {
@@ -880,6 +948,52 @@
         });
         $("ollamaGenOut").style.display = "block";
         $("ollamaGenOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnOllamaChat").onclick = async () => {
+      try {
+        const model = $("ochatModel").value.trim();
+        if (!model) throw new Error("Enter model.");
+        let messages;
+        try {
+          messages = JSON.parse($("ochatMessages").value || "[]");
+        } catch {
+          throw new Error("Messages must be valid JSON array.");
+        }
+        if (!Array.isArray(messages) || !messages.length) {
+          throw new Error("Messages must be a non-empty JSON array.");
+        }
+        const out = await fetchJson("/v1/ollama/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, messages, stream: false }),
+        });
+        $("ochatOut").style.display = "block";
+        $("ochatOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnNearDup").onclick = async () => {
+      try {
+        const doc_id = $("ndDocId").value.trim();
+        if (!doc_id) throw new Error("Enter doc_id (from an indexed upload).");
+        const raw = ($("ndMinSim").value || "").trim();
+        const min_similarity = raw === "" ? 0.88 : parseFloat(raw);
+        if (!Number.isFinite(min_similarity) || min_similarity < 0.5 || min_similarity > 1) {
+          throw new Error("Min similarity must be between 0.5 and 1.");
+        }
+        const out = await fetchJson("/v1/rag/near-duplicate-chunks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ doc_id, min_similarity }),
+        });
+        $("ndOut").style.display = "block";
+        $("ndOut").textContent = JSON.stringify(out, null, 2);
       } catch (e) {
         alert(e.message || String(e));
       }

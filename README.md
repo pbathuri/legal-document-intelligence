@@ -74,6 +74,8 @@ legal-api
    - `GET /v1/metrics` — in-process HTTP request totals + path buckets (UUID run ids normalized); resets on restart
    - `GET /v1/metrics/prometheus` — Prometheus text exposition for scraping
    - `GET /v1/ollama/host` — native daemon introspection: **`/api/version`** + **`/api/ps`** (running models on the machine)
+   - `GET /v1/ollama/version` — lightweight **`GET /api/version`** from the Ollama daemon (single-purpose; also folded into preflight deep)
+   - `GET /v1/embeddings/info` — resolved embedding provider/model env + vector **dimension** + probe encode timing
    - `POST /v1/embeddings/warmup` — forces embedding backend load (sentence-transformers or Ollama `/api/embed`)
    - `POST /v1/embeddings/embed-texts` — batch vectors for up to **48** strings (same embedding backend as RAG; large payloads — use for pipelines/agents on-device)
    - `POST /v1/embeddings/similarity` — JSON `{ "text_a", "text_b" }` → cosine similarity + embedding dimension (same backend as RAG)
@@ -88,6 +90,7 @@ legal-api
    - `GET /v1/documents/{doc_id}/chunks` — paginated chunk payloads for RAG debugging (`cursor` + `limit`)
    - `DELETE /v1/documents/{doc_id}` — remove all vectors for that document from Qdrant
    - `POST /v1/documents/purge` — JSON `{ "doc_ids": ["...", "..."] }` batch-delete vectors (≤200 ids)
+   - `POST /v1/rag/near-duplicate-chunks` — intra-**doc_id** chunk pairs above a cosine threshold (bounded chunk count; uses same embedding backend as RAG — OCR overlap / duplicate page QA)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
    - `POST /v1/ingest/local` — JSON body `{ "path": "/absolute/file.pdf", "use_ocr": false }` — only if `LEGAL_INTEL_ALLOW_LOCAL_PATHS` lists allowed absolute directory prefixes (comma-separated)
@@ -97,8 +100,10 @@ legal-api
    - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources); optional JSON **`limit`** (1–128) overrides **`RETRIEVAL_TOP_K`** for that call
    - `POST /v1/query/retrieve-only` — same retrieval + **`formatted_context`** as `/v1/query`, but **no LLM** (sources + context only); supports **`limit`** override
    - `POST /v1/ollama/generate` — forwards non-streaming requests to Ollama’s native **`POST /api/generate`** (model, prompt, optional `system`, `options`; uses origin from `OLLAMA_BASE_URL`)
+   - `POST /v1/ollama/chat` — Ollama **`POST /api/chat`** (multi-turn **`messages`**, non-streaming; optional **`options`** merge)
    - `POST /v1/ollama/show` — Ollama **`POST /api/show`** (inspect model template, parameters, etc.)
    - `GET /v1/system/snapshot` — Unix load averages + optional **psutil** top RSS processes (`top_n` query param)
+   - `POST /v1/maintenance/optimize-sqlite` — **`PRAGMA optimize`** on the runs DB when **`PERSIST_RUNS=1`** (planner stats / lightweight maintenance)
    - `POST /v1/maintenance/vacuum-sqlite` — runs **`VACUUM`** on the runs SQLite DB when **`PERSIST_RUNS=1`** (returns before/after file sizes)
 
 3. Point the **API base URL** in `index.html` (saved in browser localStorage) at your running server. Set `LEGAL_INTEL_CORS_ORIGINS` on the API if you restrict origins (default allows `*`).
