@@ -1,0 +1,26 @@
+src/legal_intel/config.py
+  s_c7571ff3b984be::t_198f0a7fc7cc24 36-37
+.env.example
+  s_c7571ff3b984be::t_e44d2f790d135a 20-22,24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "ddb654253aa0d27bd849e90fb69118d321454244",
+  "prompts": {},
+  "humans": {
+    "h_ec613b3074a81b": {
+      "author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "gpt-5.5"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
