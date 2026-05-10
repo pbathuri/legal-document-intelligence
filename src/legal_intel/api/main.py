@@ -21,11 +21,15 @@ from legal_intel.api.schemas import (
     AnalyzeResponse,
     BatchIngestResponse,
     DocumentPurgeBatchRequest,
+    EmbeddingSimilarityRequest,
+    EmbeddingSimilarityResponse,
     HealthResponse,
     IngestResponse,
     LocalPathIngestRequest,
+    OllamaGenerateRequest,
     QueryRequest,
     QueryResponse,
+    RetrieveOnlyResponse,
     RunSummaryOut,
     RuntimeOut,
 )
@@ -40,6 +44,7 @@ from legal_intel.persistence.runs import (
     iter_runs_ndjson_lines,
     list_runs,
     search_runs,
+    vacuum_sqlite_file,
 )
 from legal_intel.pipeline import doc_id_from_pdf_bytes, ingest_pdf_with_stats
 from legal_intel.prompts import QUERY_SYSTEM, format_context_block
@@ -49,6 +54,9 @@ from legal_intel.runtime.api_metrics import incr_request as metrics_incr_request
 from legal_intel.runtime.audit_log import append_audit_event
 from legal_intel.runtime.build_info import gather_build_info
 from legal_intel.runtime.device_profile import gather_device_profile
+from legal_intel.runtime.embedding_similarity import similarity_for_text_pair
+from legal_intel.runtime.ollama_generate_proxy import ollama_native_generate
+from legal_intel.runtime.system_snapshot import gather_system_snapshot
 from legal_intel.runtime.local_paths import is_path_under_allowlist, parse_allow_prefixes
 from legal_intel.runtime.ollama_probe import (
     fetch_ollama_model_names,
@@ -96,7 +104,26 @@ def _audit_prefixes() -> tuple[str, ...]:
         "/v1/runs",
         "/v1/embeddings",
         "/v1/llm",
+        "/v1/ollama",
+        "/v1/maintenance",
     )
+
+
+def _rag_sources_from_hits(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
+    for h in hits:
+        sources.append(
+            {
+                "doc_id": h.get("doc_id"),
+                "doc_label": h.get("doc_label"),
+                "chunk_index": h.get("chunk_index"),
+                "page_start": h.get("page_start"),
+                "page_end": h.get("page_end"),
+                "score": h.get("score"),
+                "text_preview": (h.get("text") or "")[:1200],
+            }
+        )
+    return sources
 
 
 def _should_audit_path(method: str, path: str) -> bool:
@@ -162,7 +189,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.8.0",
+    version="0.9.0",
 )
 
 _origins = _cors_origins()
@@ -267,6 +294,19 @@ def health() -> HealthResponse:
     )
 
 
+@app.get("/health/live")
+def health_live() -> dict[str, str]:
+    """Liveness: process is accepting connections (no dependency checks)."""
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+def health_ready() -> dict[str, Any]:
+    """Readiness: aggregated gates from preflight (Qdrant, Ollama when configured, embed probe)."""
+    pf = gather_preflight()
+    return {"ready": pf["ready"], "degraded": pf.get("degraded", False)}
+
+
 @app.get("/v1/preflight")
 def preflight(deep: bool = False) -> dict[str, Any]:
     """Single payload for dashboards: Qdrant, Ollama tags/embed, disk, device. ``deep=1`` adds Ollama /version+/ps."""
@@ -320,6 +360,21 @@ def embeddings_warmup() -> dict[str, Any]:
     return {"ok": True, "dimension": m.dimension, "elapsed_seconds": round(dt, 4)}
 
 
+@app.post("/v1/embeddings/similarity", response_model=EmbeddingSimilarityResponse)
+def embedding_cosine_similarity(body: EmbeddingSimilarityRequest) -> EmbeddingSimilarityResponse:
+    """Cosine similarity between two texts using the active embedding backend (local)."""
+    try:
+        out = similarity_for_text_pair(body.text_a, body.text_b)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return EmbeddingSimilarityResponse(
+        cosine_similarity=float(out["cosine_similarity"]),
+        dimension=int(out["dimension"]),
+    )
+
+
 @app.get("/v1/build")
 def build_metadata() -> dict[str, Any]:
     """Package / Python / optional git SHA (set ``LEGAL_INTEL_GIT_SHA`` in deploy)."""
@@ -354,6 +409,55 @@ def llm_route_probe() -> dict[str, Any]:
         }
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@app.post("/v1/ollama/generate")
+def ollama_generate_native(body: OllamaGenerateRequest) -> dict[str, Any]:
+    """
+    Native Ollama ``POST /api/generate`` (non-streaming). Sends **prompt**/**model** to the daemon
+    derived from ``OLLAMA_BASE_URL`` — complements OpenAI-compatible ``/v1/chat/completions``.
+    """
+    if body.stream:
+        raise HTTPException(
+            status_code=400, detail="Set stream=false; streaming not supported here."
+        )
+    s = get_settings()
+    payload: dict[str, Any] = {
+        "model": body.model,
+        "prompt": body.prompt,
+        "stream": False,
+    }
+    if body.system:
+        payload["system"] = body.system
+    payload.update(body.options)
+    try:
+        return ollama_native_generate(
+            s.ollama_base_url,
+            payload,
+            timeout_seconds=max(60.0, s.ollama_probe_timeout_seconds * 30),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@app.get("/v1/system/snapshot")
+def system_snapshot(top_n: int = 8) -> dict[str, Any]:
+    """Load averages (Unix) + optional psutil top RSS processes."""
+    return gather_system_snapshot(top_n=min(max(top_n, 1), 32))
+
+
+@app.post("/v1/maintenance/vacuum-sqlite")
+def maintenance_vacuum_runs_db() -> dict[str, Any]:
+    """SQLite VACUUM on the diligence runs database (requires persist_runs)."""
+    s = get_settings()
+    if not s.persist_runs:
+        raise HTTPException(status_code=400, detail="Run persistence disabled")
+    try:
+        return vacuum_sqlite_file(Path(s.runs_db_path))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/v1/runtime", response_model=RuntimeOut)
@@ -756,21 +860,21 @@ def rag_query(body: QueryRequest) -> QueryResponse:
     ctx = format_context_block(hits)
     user = f"QUESTION:\n{body.question}\n\nCONTEXT EXCERPTS:\n{ctx}"
     answer = chat_complete(QUERY_SYSTEM, user, temperature=0.05, task="specialist")
+    return QueryResponse(answer=answer, sources=_rag_sources_from_hits(hits))
 
-    sources: list[dict[str, Any]] = []
-    for h in hits:
-        sources.append(
-            {
-                "doc_id": h.get("doc_id"),
-                "doc_label": h.get("doc_label"),
-                "chunk_index": h.get("chunk_index"),
-                "page_start": h.get("page_start"),
-                "page_end": h.get("page_end"),
-                "score": h.get("score"),
-                "text_preview": (h.get("text") or "")[:1200],
-            }
-        )
-    return QueryResponse(answer=answer, sources=sources)
+
+@app.post("/v1/query/retrieve-only", response_model=RetrieveOnlyResponse)
+def rag_retrieve_only(body: QueryRequest) -> RetrieveOnlyResponse:
+    """Same retrieval path as grounded Q&A but **no LLM** — debug ranking and context assembly."""
+    s = get_settings()
+    store = LegalVectorStore()
+    hits = store.search(body.question, limit=s.retrieval_top_k, doc_id=body.doc_id)
+    ctx = format_context_block(hits)
+    return RetrieveOnlyResponse(
+        sources=_rag_sources_from_hits(hits),
+        formatted_context=ctx,
+        retrieval_top_k=s.retrieval_top_k,
+    )
 
 
 @app.post("/v1/query/stream")
@@ -782,19 +886,7 @@ def rag_query_stream(body: QueryRequest):
             store = LegalVectorStore()
             hits = store.search(body.question, limit=s.retrieval_top_k, doc_id=body.doc_id)
             ctx = format_context_block(hits)
-            src: list[dict[str, Any]] = []
-            for h in hits:
-                src.append(
-                    {
-                        "doc_id": h.get("doc_id"),
-                        "doc_label": h.get("doc_label"),
-                        "chunk_index": h.get("chunk_index"),
-                        "page_start": h.get("page_start"),
-                        "page_end": h.get("page_end"),
-                        "score": h.get("score"),
-                        "text_preview": (h.get("text") or "")[:1200],
-                    }
-                )
+            src = _rag_sources_from_hits(hits)
             yield _sse_payload({"event": "sources", "sources": src})
             user = f"QUESTION:\n{body.question}\n\nCONTEXT EXCERPTS:\n{ctx}"
             for piece in chat_stream(QUERY_SYSTEM, user, temperature=0.05, task="specialist"):

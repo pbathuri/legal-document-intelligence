@@ -262,6 +262,8 @@
           style="flex:1; min-width:220px;" autocomplete="off" />
         <button type="button" id="btnSaveBase">Save</button>
         <button type="button" id="btnHealth">Check health</button>
+        <button type="button" id="btnHealthLive" title="GET /health/live">Live</button>
+        <button type="button" id="btnHealthReady" title="GET /health/ready">Ready</button>
         <span id="healthPill" class="pill bad">Unknown</span>
       </div>
       <pre class="sources" id="healthMeta" style="margin-top:0.75rem;max-height:200px;display:none;"></pre>
@@ -295,6 +297,8 @@
         <button type="button" id="btnExportRuns">Export runs (NDJSON)</button>
         <button type="button" id="btnPrometheus">Metrics (Prometheus)</button>
         <button type="button" id="btnMemoRun">Open run memo (.md)</button>
+        <button type="button" id="btnSysSnap" title="GET /v1/system/snapshot">System snapshot</button>
+        <button type="button" id="btnVacuumSqlite" title="POST /v1/maintenance/vacuum-sqlite">Vacuum runs DB</button>
       </div>
       <pre class="sources" id="metaOut" style="margin-top:0.65rem;max-height:220px;display:none;"></pre>
     </div>
@@ -355,12 +359,41 @@
       <div class="row" style="margin-top:0.65rem;">
         <button type="button" class="primary" id="btnQuery">Ask</button>
         <button type="button" id="btnQueryStream">Stream answer</button>
+        <button type="button" id="btnRetrieveOnly" title="POST /v1/query/retrieve-only">Retrieve only</button>
       </div>
       <div class="err" id="queryErr"></div>
       <h3 style="font-size:0.85rem;color:var(--muted);margin:1rem 0 0.35rem;">Answer</h3>
       <pre class="report" id="qaAnswer" style="display:none;"></pre>
       <h3 style="font-size:0.85rem;color:var(--muted);margin:1rem 0 0.35rem;">Sources</h3>
       <div class="sources" id="qaSources" style="display:none;"></div>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>Embedding similarity</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;">Uses the same embedding backend as RAG (<code>POST /v1/embeddings/similarity</code>).</p>
+      <label for="simA">Text A</label>
+      <textarea id="simA" placeholder="First passage…"></textarea>
+      <label for="simB" style="margin-top:0.65rem;">Text B</label>
+      <textarea id="simB" placeholder="Second passage…"></textarea>
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnEmbeddingSim">Compute cosine similarity</button>
+      </div>
+      <pre class="sources" id="simOut" style="margin-top:0.65rem;display:none;max-height:160px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>Ollama native generate</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;">Proxies to the daemon’s <code>POST /api/generate</code> (non-streaming). Model must exist in <code>ollama list</code>.</p>
+      <label for="ollamaModel">Model</label>
+      <input type="text" id="ollamaModel" placeholder="e.g. llama3.2" autocomplete="off" />
+      <label for="ollamaSystem" style="margin-top:0.65rem;">System (optional)</label>
+      <textarea id="ollamaSystem" placeholder="Optional system prompt…"></textarea>
+      <label for="ollamaPrompt" style="margin-top:0.65rem;">Prompt</label>
+      <textarea id="ollamaPrompt" placeholder="User prompt…"></textarea>
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnOllamaNativeGen">Generate</button>
+      </div>
+      <pre class="sources" id="ollamaGenOut" style="margin-top:0.65rem;display:none;max-height:280px;"></pre>
     </div>
 
     <p class="footer-note">
@@ -439,6 +472,30 @@
         const hm = $("healthMeta");
         hm.style.display = "block";
         hm.textContent = JSON.stringify(h, null, 2);
+      } catch (e) {
+        setHealth(false, "Offline");
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnHealthLive").onclick = async () => {
+      try {
+        const h = await fetchJson("/health/live");
+        $("healthMeta").style.display = "block";
+        $("healthMeta").textContent = JSON.stringify(h, null, 2);
+        setHealth(true, "Live OK");
+      } catch (e) {
+        setHealth(false, "Offline");
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnHealthReady").onclick = async () => {
+      try {
+        const h = await fetchJson("/health/ready");
+        $("healthMeta").style.display = "block";
+        $("healthMeta").textContent = JSON.stringify(h, null, 2);
+        setHealth(!!h.ready, h.ready ? "Ready" : "Not ready");
       } catch (e) {
         setHealth(false, "Offline");
         alert(e.message || String(e));
@@ -662,6 +719,80 @@
       }
     };
 
+    $("btnSysSnap").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/system/snapshot");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnVacuumSqlite").onclick = async () => {
+      try {
+        const res = await fetch(apiUrl("/v1/maintenance/vacuum-sqlite"), { method: "POST" });
+        const text = await res.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = { raw: text };
+        }
+        if (!res.ok) {
+          const detail = data?.detail || data?.message || text || res.statusText;
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        }
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnEmbeddingSim").onclick = async () => {
+      try {
+        const body = {
+          text_a: $("simA").value.trim(),
+          text_b: $("simB").value.trim(),
+        };
+        if (!body.text_a || !body.text_b) throw new Error("Enter both texts.");
+        const out = await fetchJson("/v1/embeddings/similarity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        $("simOut").style.display = "block";
+        $("simOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnOllamaNativeGen").onclick = async () => {
+      try {
+        const model = $("ollamaModel").value.trim();
+        const prompt = $("ollamaPrompt").value.trim();
+        if (!model || !prompt) throw new Error("Enter model and prompt.");
+        const sys = $("ollamaSystem").value.trim();
+        const body = {
+          model,
+          prompt,
+          stream: false,
+          ...(sys ? { system: sys } : {}),
+        };
+        const out = await fetchJson("/v1/ollama/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        $("ollamaGenOut").style.display = "block";
+        $("ollamaGenOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
     $("tabIndia").onclick = () => setTab("india_re");
     $("tabMna").onclick = () => setTab("mna");
 
@@ -827,6 +958,32 @@
         $("qaAnswer").textContent = out.answer;
         $("qaSources").style.display = "block";
         $("qaSources").textContent = JSON.stringify(out.sources, null, 2);
+      } catch (e) {
+        $("queryErr").textContent = e.message || String(e);
+      }
+    };
+
+    $("btnRetrieveOnly").onclick = async () => {
+      $("queryErr").textContent = "";
+      try {
+        const body = {
+          question: $("qaQ").value.trim(),
+          doc_id: $("qaDoc").value.trim() || null,
+        };
+        if (!body.question) throw new Error("Enter a question.");
+        const out = await fetchJson("/v1/query/retrieve-only", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        $("qaAnswer").style.display = "block";
+        $("qaAnswer").textContent = out.formatted_context || "(empty context)";
+        $("qaSources").style.display = "block";
+        $("qaSources").textContent = JSON.stringify(
+          { retrieval_top_k: out.retrieval_top_k, sources: out.sources },
+          null,
+          2
+        );
       } catch (e) {
         $("queryErr").textContent = e.message || String(e);
       }

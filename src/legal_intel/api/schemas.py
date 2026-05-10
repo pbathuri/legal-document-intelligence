@@ -78,6 +78,39 @@ class QueryResponse(BaseModel):
     sources: list[dict[str, Any]]
 
 
+class RetrieveOnlyResponse(BaseModel):
+    """RAG retrieval + formatted context block without calling an LLM."""
+
+    sources: list[dict[str, Any]]
+    formatted_context: str
+    retrieval_top_k: int
+
+
+class EmbeddingSimilarityRequest(BaseModel):
+    """Pairwise semantic similarity via the configured embedding backend."""
+
+    text_a: str = Field(..., min_length=1, max_length=100_000)
+    text_b: str = Field(..., min_length=1, max_length=100_000)
+
+
+class EmbeddingSimilarityResponse(BaseModel):
+    cosine_similarity: float
+    dimension: int
+
+
+class OllamaGenerateRequest(BaseModel):
+    """Forward to Ollama ``POST /api/generate`` (non-streaming). Uses ``OLLAMA_BASE_URL`` origin."""
+
+    model: str = Field(..., min_length=1)
+    prompt: str = Field(..., min_length=1)
+    stream: bool = False
+    system: str | None = None
+    options: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional JSON fields merged into the Ollama request (temperature, num_ctx, etc.).",
+    )
+
+
 class RunSummaryOut(BaseModel):
     id: str
     created_at: str

@@ -66,6 +66,8 @@ legal-api
 
 2. Endpoints (selection):
    - `GET /health` — mock/live LLM, embedding provider, Qdrant, resolved multimodel names; when `LLM_PROVIDER=ollama`, lists models from local **Ollama** `/api/tags`
+   - `GET /health/live` — liveness only (process accepting requests; no dependency checks)
+   - `GET /health/ready` — readiness from **`gather_preflight()`** (Qdrant, Ollama when used, embed probe)
    - `GET /v1/preflight` — single JSON for ops: Qdrant ping, Ollama `/api/tags` + optional `/api/embed` probe, disk, `device` profile; add **`?deep=1`** for embedded **`/api/version`** + **`/api/ps`**
    - `GET /v1/build` — package version, API version, Python, optional **`LEGAL_INTEL_GIT_SHA`**
    - `POST /v1/llm/probe` — one minimal chat completion via routed stack (skipped when mock LLM)
@@ -73,6 +75,7 @@ legal-api
    - `GET /v1/metrics/prometheus` — Prometheus text exposition for scraping
    - `GET /v1/ollama/host` — native daemon introspection: **`/api/version`** + **`/api/ps`** (running models on the machine)
    - `POST /v1/embeddings/warmup` — forces embedding backend load (sentence-transformers or Ollama `/api/embed`)
+   - `POST /v1/embeddings/similarity` — JSON `{ "text_a", "text_b" }` → cosine similarity + embedding dimension (same backend as RAG)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
@@ -90,6 +93,10 @@ legal-api
    - `POST /v1/analyze` — full graph run; returns optional `run_id` when persistence enabled
    - `POST /v1/analyze/stream` — **SSE** (`text/event-stream`) LangGraph step updates + final merged state
    - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources)
+   - `POST /v1/query/retrieve-only` — same retrieval + **`formatted_context`** as `/v1/query`, but **no LLM** (sources + context only)
+   - `POST /v1/ollama/generate` — forwards non-streaming requests to Ollama’s native **`POST /api/generate`** (model, prompt, optional `system`, `options`; uses origin from `OLLAMA_BASE_URL`)
+   - `GET /v1/system/snapshot` — Unix load averages + optional **psutil** top RSS processes (`top_n` query param)
+   - `POST /v1/maintenance/vacuum-sqlite` — runs **`VACUUM`** on the runs SQLite DB when **`PERSIST_RUNS=1`** (returns before/after file sizes)
 
 3. Point the **API base URL** in `index.html` (saved in browser localStorage) at your running server. Set `LEGAL_INTEL_CORS_ORIGINS` on the API if you restrict origins (default allows `*`).
 

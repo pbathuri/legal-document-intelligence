@@ -133,6 +133,25 @@ def search_runs(*, db_path: Path, q: str, limit: int = 40) -> list[RunSummary]:
     return out
 
 
+def vacuum_sqlite_file(db_path: Path) -> dict[str, Any]:
+    """Run SQLite VACUUM on the runs database (reclaim space / optimize pages)."""
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    before = db_path.stat().st_size if db_path.is_file() else 0
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("VACUUM")
+        conn.commit()
+    finally:
+        conn.close()
+    after = db_path.stat().st_size if db_path.is_file() else 0
+    return {
+        "path": str(db_path.resolve()),
+        "bytes_before": before,
+        "bytes_after": after,
+    }
+
+
 def delete_run(*, db_path: Path, run_id: str) -> bool:
     conn = _connect(db_path)
     try:

@@ -516,3 +516,101 @@ def test_runs_search(tmp_path, monkeypatch):
         assert r2.status_code == 200
         assert r2.json() == []
     get_settings.cache_clear()
+
+
+def test_health_live_ready(api_client):
+    assert api_client.get("/health/live").json()["status"] == "alive"
+    r = api_client.get("/health/ready")
+    assert r.status_code == 200
+    assert "ready" in r.json()
+
+
+def test_embedding_similarity(api_client):
+    r = api_client.post(
+        "/v1/embeddings/similarity",
+        json={
+            "text_a": "the indemnity clause caps liability.",
+            "text_b": "the indemnity clause caps liability.",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["cosine_similarity"] > 0.99
+    assert r.json()["dimension"] > 0
+
+
+def test_retrieve_only(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="ro1",
+        doc_label="x.pdf",
+        chunks=[("alpha beta gamma indemnity clause text.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/query/retrieve-only",
+        json={"question": "alpha beta indemnity", "doc_id": "ro1"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["sources"]) >= 1
+    assert body["formatted_context"]
+
+
+def test_system_snapshot(api_client):
+    r = api_client.get("/v1/system/snapshot")
+    assert r.status_code == 200
+    assert "loadavg" in r.json()
+
+
+def test_vacuum_sqlite(tmp_path, monkeypatch):
+    db = tmp_path / "vac.db"
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_RUNS", "1")
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.post("/v1/maintenance/vacuum-sqlite")
+        assert r.status_code == 200
+        assert "bytes_after" in r.json()
+    get_settings.cache_clear()
+
+
+def test_ollama_generate_stream_rejected(api_client):
+    r = api_client.post(
+        "/v1/ollama/generate",
+        json={"model": "m", "prompt": "p", "stream": True},
+    )
+    assert r.status_code == 400
+
+
+def test_ollama_generate_proxied(monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from unittest.mock import patch
+
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with patch(
+        "legal_intel.api.main.ollama_native_generate",
+        return_value={"response": "generated-body"},
+    ):
+        with TestClient(app) as client:
+            r = client.post("/v1/ollama/generate", json={"model": "any", "prompt": "hi"})
+            assert r.status_code == 200
+            assert r.json().get("response") == "generated-body"
+    get_settings.cache_clear()
