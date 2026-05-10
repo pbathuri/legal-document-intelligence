@@ -494,3 +494,39 @@ class RiskScanResponse(BaseModel):
     risk_register: dict[str, Any]
     sources: list[dict[str, Any]]
     retrieval_top_k: int
+
+
+class GlossaryExtractRequest(BaseModel):
+    """Single-doc retrieval + JSON glossary / defined terms (``glossary_extract_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="definitions construed capitalized terms exhibit schedule appendix interpretation meaning",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class GlossaryExtractResponse(BaseModel):
+    doc_id: str
+    glossary: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class EmbeddingCentroidRequest(BaseModel):
+    """Mean embedding vector + each text's cosine similarity to that centroid (cluster coherence QA)."""
+
+    texts: list[str] = Field(..., min_length=2, max_length=48)
+
+
+class EmbeddingCentroidResponse(BaseModel):
+    count: int
+    dimension: int
+    centroid: list[float]
+    cosine_to_centroid: list[float]
+    text_previews: list[str]
+    embedding_provider: str
+    ollama_embedding_model: str = ""
+    embedding_model: str = ""

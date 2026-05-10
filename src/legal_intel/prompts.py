@@ -108,6 +108,23 @@ Respond with ONE JSON object:
 Rules: Every risk must cite at least one evidence_refs index when CONTEXT is non-empty; if CONTEXT is empty, risks:[] and explain limitations.
 Never invent dollar amounts, statutes, or party names not present in CONTEXT."""
 
+GLOSSARY_JSON_SYSTEM = """[glossary_extract_v1]
+You extract defined terms and shorthand meanings from legal CONTEXT excerpts ONLY (numbered [n]).
+Respond with ONE JSON object:
+{
+  "terms": [
+    {
+      "term": "<defined phrase as used in the instrument>",
+      "definition_or_scope": "<concise paraphrase grounded in excerpts — quote sparingly>",
+      "confidence": "high"|"medium"|"low",
+      "evidence_refs": [<integers — [n] indices>]
+    }
+  ],
+  "limitations": "<definitions not found or ambiguous in CONTEXT>"
+}
+Rules: Include only terms actually addressed in CONTEXT; merge duplicates. If CONTEXT has no definitions-style language, use terms:[] and explain limitations.
+Never invent cross-references or definitions not supported by excerpts."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

@@ -18,6 +18,33 @@ def cosine_similarity_uvec(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
+def centroid_similarities_for_texts(texts: list[str]) -> dict[str, Any]:
+    """Mean embedding vector (element-wise) + cosine similarity of each row to that centroid."""
+    from legal_intel.rag.embeddings import make_embedding_model
+
+    cleaned = [(t or "").strip() for t in texts]
+    if len(cleaned) < 2:
+        raise ValueError("Provide at least two non-empty texts")
+    if any(not x for x in cleaned):
+        raise ValueError("Each text must be non-empty")
+    if len(cleaned) > 48:
+        raise ValueError("At most 48 texts for centroid analytics")
+    m = make_embedding_model()
+    vecs = m.encode(cleaned)
+    n = len(vecs)
+    dim = len(vecs[0])
+    centroid = [sum(vecs[i][j] for i in range(n)) / float(n) for j in range(dim)]
+    cosines = [round(cosine_similarity_uvec(vecs[i], centroid), 8) for i in range(n)]
+    previews = [s[:120] + ("…" if len(s) > 120 else "") for s in cleaned]
+    return {
+        "count": n,
+        "dimension": dim,
+        "centroid": [round(float(x), 8) for x in centroid],
+        "cosine_to_centroid": cosines,
+        "text_previews": previews,
+    }
+
+
 def pairwise_cosine_matrix_for_texts(texts: list[str]) -> dict[str, Any]:
     """Encode all strings once; return full cosine similarity matrix (symmetric, diagonal 1.0)."""
     from legal_intel.rag.embeddings import make_embedding_model

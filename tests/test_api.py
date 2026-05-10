@@ -1591,3 +1591,81 @@ def test_runtime_local_path_allowlist(tmp_path, monkeypatch):
         assert data["prefix_count"] >= 1
         assert data["items"][0]["exists"] is True
     get_settings.cache_clear()
+
+
+def test_glossary_extract(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="gl1",
+        doc_label="defs.pdf",
+        chunks=[
+            (
+                '"Material Adverse Effect" means any change that is materially adverse to the business.',
+                {"page_start": 1, "page_end": 1},
+            )
+        ],
+    )
+    r = api_client.post(
+        "/v1/rag/glossary-extract",
+        json={"doc_id": "gl1", "retrieval_query": "Material Adverse"},
+    )
+    assert r.status_code == 200
+    b = r.json()
+    assert b["doc_id"] == "gl1"
+    assert b["glossary"]
+    assert len(b["sources"]) >= 1
+
+
+def test_risk_scan_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="rss1",
+        doc_label="r.pdf",
+        chunks=[("No survival of representations after Closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/risk-scan/stream",
+        json={"doc_id": "rss1", "retrieval_query": "representations"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text and "done" in r.text
+
+
+def test_query_hyde_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="hys1",
+        doc_label="h.pdf",
+        chunks=[("Purchase price shall be adjusted per working capital schedule.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/query/hyde/stream",
+        json={"question": "How is purchase price adjusted?", "doc_id": "hys1"},
+    )
+    assert r.status_code == 200
+    assert "hypothetical_document" in r.text
+    assert "done" in r.text
+
+
+def test_embeddings_centroid_similarities(api_client):
+    r = api_client.post(
+        "/v1/embeddings/centroid-similarities",
+        json={
+            "texts": [
+                "The lease term is ten years with renewal option.",
+                "Renewal may extend the lease for five additional years.",
+                "Unrelated: shipping crates arrive Tuesday.",
+            ]
+        },
+    )
+    assert r.status_code == 200
+    d = r.json()
+    assert d["count"] == 3
+    assert len(d["centroid"]) == d["dimension"]
+    assert len(d["cosine_to_centroid"]) == 3

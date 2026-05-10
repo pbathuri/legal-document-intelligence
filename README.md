@@ -85,6 +85,7 @@ legal-api
    - `POST /v1/embeddings/embed-local-text-files` — read UTF-8 files from absolute paths under **`LEGAL_INTEL_ALLOW_LOCAL_PATHS`** (≤16 paths, ≤256KiB each) → per-path vectors + errors (same embedding backend as RAG)
    - `POST /v1/embeddings/similarity` — JSON `{ "text_a", "text_b" }` → cosine similarity + embedding dimension (same backend as RAG)
    - `POST /v1/embeddings/pairwise-matrix` — JSON `{ "texts": ["...", ...] }` (2–24 strings) → full **N×N** cosine matrix + short text previews (same embedding backend as RAG)
+   - `POST /v1/embeddings/centroid-similarities` — JSON `{ "texts": ["...", ...] }` (2–48 strings) → **mean embedding vector** + each row's cosine to that centroid (topic coherence / bundle QA)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/runtime/storage` — bounded filesystem inventory: bytes + file counts under **`UPLOAD_STORAGE_DIR`**, **`manifest.jsonl`** size/line estimate, **`RUNS_DB_PATH`** file size (device-local maintenance)
    - `GET /v1/runtime/git` — best-effort **Git** snapshot for the API **`cwd`** (`commit`, `branch`, `dirty` when **`git`** is on **PATH**)
@@ -112,6 +113,8 @@ legal-api
    - `POST /v1/rag/timeline-extract` — retrieval + JSON **timeline** (`events` with **`date_text`**, **`evidence_refs`** ↔ **`[n]`**; **`TIMELINE_JSON_SYSTEM`** / **`timeline_extract_v1`**)
    - `POST /v1/rag/timeline-extract/stream` — **SSE**: **`sources`** event + token stream of JSON timeline text (**extraction** routing)
    - `POST /v1/rag/risk-scan` — retrieval + JSON **risk register** (`risks[]` with **`severity`**, **`evidence_refs`**; **`RISK_SCAN_JSON_SYSTEM`** / **`risk_scan_v1`**)
+   - `POST /v1/rag/risk-scan/stream` — **SSE**: **`sources`** + streaming JSON risk text (**extraction** routing)
+   - `POST /v1/rag/glossary-extract` — retrieval + JSON **glossary** (`terms[]` + **`evidence_refs`**; **`GLOSSARY_JSON_SYSTEM`** / **`glossary_extract_v1`**)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
@@ -121,6 +124,7 @@ legal-api
    - `POST /v1/analyze/stream` — **SSE** (`text/event-stream`) LangGraph step updates + final merged state
    - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources); optional JSON **`limit`** (1–128) overrides **`RETRIEVAL_TOP_K`** for that call
    - `POST /v1/query/hyde` — **HyDE**-style RAG: hypothetical excerpt (**specialist** routing) + retrieval using **question + excerpt** concatenated query → grounded answer (same **`QUERY_SYSTEM`** stack as **`/v1/query`**; **`hyde_temperature`** controls the fiction step)
+   - `POST /v1/query/hyde/stream` — **SSE**: **`hypothetical_document`** event → **`sources`** → **`QUERY_SYSTEM`** token stream + **`done`**
    - `POST /v1/query/citations` — same retrieval as **`/v1/query`**, but the LLM returns **JSON** with **`direct_answer`**, **`citations`** (`ref_index` ↔ chunk **`[n]`**), **`limitations`** (`json_object` / Ollama-compatible); exposes **`structured`** + flattened **`answer_markdown`**
    - `POST /v1/query/batch` — multiple grounded questions in one request (shared **`doc_id`** / **`limit`**; sequential specialist calls — fewer round trips for agent pipelines)
    - `POST /v1/query/retrieve-only/batch` — batch **`retrieve-only`** (no LLM; contexts + sources per question)

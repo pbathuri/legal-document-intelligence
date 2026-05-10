@@ -63,6 +63,10 @@ from legal_intel.api.schemas import (
     TimelineExtractResponse,
     RiskScanRequest,
     RiskScanResponse,
+    GlossaryExtractRequest,
+    GlossaryExtractResponse,
+    EmbeddingCentroidRequest,
+    EmbeddingCentroidResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -100,6 +104,7 @@ from legal_intel.prompts import (
     QUERY_SYSTEM,
     HYDE_HYPOTHETICAL_DOC_SYSTEM,
     RISK_SCAN_JSON_SYSTEM,
+    GLOSSARY_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -115,6 +120,7 @@ from legal_intel.runtime.device_profile import gather_device_profile
 from legal_intel.runtime.git_snapshot import gather_git_snapshot
 from legal_intel.runtime.chunk_near_duplicate import near_duplicate_chunk_pairs
 from legal_intel.runtime.embedding_similarity import (
+    centroid_similarities_for_texts,
     pairwise_cosine_matrix_for_texts,
     similarity_for_text_pair,
 )
@@ -341,6 +347,16 @@ def _prepare_risk_scan_parts(
     )
 
 
+def _prepare_glossary_extract_parts(
+    body: GlossaryExtractRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -422,7 +438,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.18.0",
+    version="0.19.0",
 )
 
 _origins = _cors_origins()
@@ -806,6 +822,40 @@ def embedding_pairwise_matrix(body: EmbeddingPairwiseMatrixRequest) -> Embedding
         count=int(out["count"]),
         dimension=int(out["dimension"]),
         matrix=out["matrix"],
+        text_previews=list(out["text_previews"]),
+        embedding_provider=s.embedding_provider,
+        ollama_embedding_model=s.ollama_embedding_model,
+        embedding_model=s.embedding_model,
+    )
+
+
+@app.post("/v1/embeddings/centroid-similarities", response_model=EmbeddingCentroidResponse)
+def embedding_centroid_similarities(body: EmbeddingCentroidRequest) -> EmbeddingCentroidResponse:
+    """Mean embedding vector + per-text cosine to centroid (topic coherence / chunk bundle QA)."""
+    max_chars = 64_000
+    cleaned: list[str] = []
+    for i, t in enumerate(body.texts):
+        ts = (t or "").strip()
+        if not ts:
+            raise HTTPException(status_code=400, detail=f"texts[{i}] is empty")
+        if len(ts) > max_chars:
+            raise HTTPException(
+                status_code=400,
+                detail=f"texts[{i}] exceeds {max_chars} characters",
+            )
+        cleaned.append(ts)
+    s = get_settings()
+    try:
+        out = centroid_similarities_for_texts(cleaned)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return EmbeddingCentroidResponse(
+        count=int(out["count"]),
+        dimension=int(out["dimension"]),
+        centroid=list(out["centroid"]),
+        cosine_to_centroid=list(out["cosine_to_centroid"]),
         text_previews=list(out["text_previews"]),
         embedding_provider=s.embedding_provider,
         ollama_embedding_model=s.ollama_embedding_model,
@@ -1762,6 +1812,61 @@ def rag_risk_scan(body: RiskScanRequest) -> RiskScanResponse:
     )
 
 
+@app.post("/v1/rag/risk-scan/stream")
+def rag_risk_scan_stream(body: RiskScanRequest):
+    """SSE: sources event + streaming JSON text for the risk register (parse client-side)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_risk_scan_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                RISK_SCAN_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/glossary-extract", response_model=GlossaryExtractResponse)
+def rag_glossary_extract(body: GlossaryExtractRequest) -> GlossaryExtractResponse:
+    """Defined terms / glossary JSON from single-doc retrieval (``glossary_extract_v1``)."""
+    did, user, sources, lim = _prepare_glossary_extract_parts(body)
+    raw = chat_complete_json(
+        GLOSSARY_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        glossary: dict[str, Any] = json.loads(raw)
+        if not isinstance(glossary, dict):
+            glossary = {"_value": glossary}
+    except Exception:
+        glossary = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return GlossaryExtractResponse(
+        doc_id=did,
+        glossary=glossary,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
 def analyze(body: AnalyzeRequest) -> AnalyzeResponse:
     if body.domain == "india_re" and not body.doc_ids:
@@ -1873,6 +1978,64 @@ def rag_query_hyde(body: QueryHydeRequest) -> QueryHydeResponse:
         hypothetical_document=hyp_stripped,
         retrieval_top_k=lim,
     )
+
+
+@app.post("/v1/query/hyde/stream")
+def rag_query_hyde_stream(body: QueryHydeRequest):
+    """SSE: hypothetical excerpt → sources → token stream for grounded answer (HyDE + ``QUERY_SYSTEM``)."""
+
+    def event_gen():
+        try:
+            qr = QueryRequest(
+                question=body.question.strip(),
+                doc_id=body.doc_id,
+                limit=body.limit,
+            )
+            lim = _effective_retrieval_limit(qr)
+            hypo_user = (
+                f"QUESTION:\n{body.question.strip()}\n\n"
+                "Write ONLY the hypothetical passage — no title lines or commentary."
+            )
+            hyp = chat_complete(
+                HYDE_HYPOTHETICAL_DOC_SYSTEM,
+                hypo_user,
+                temperature=float(body.hyde_temperature),
+                task="specialist",
+            )
+            hyp_stripped = (hyp or "").strip()
+            yield _sse_payload(
+                {
+                    "event": "hypothetical_document",
+                    "text": hyp_stripped,
+                    "retrieval_top_k": lim,
+                }
+            )
+            retrieve_query = f"{body.question.strip()}\n\n{hyp_stripped}"[:14_000]
+            store = LegalVectorStore()
+            hits = store.search(retrieve_query, limit=lim, doc_id=body.doc_id)
+            sources = _rag_sources_from_hits(hits)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            ctx = format_context_block(hits)
+            user_msg = f"QUESTION:\n{body.question.strip()}\n\nCONTEXT EXCERPTS:\n{ctx}"
+            for piece in chat_stream(
+                QUERY_SYSTEM,
+                user_msg,
+                temperature=0.05,
+                max_tokens=4096,
+                task="specialist",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
 @app.post("/v1/query/citations", response_model=QueryCitationsResponse)
