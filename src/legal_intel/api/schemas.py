@@ -169,6 +169,58 @@ class NearDuplicateChunksRequest(BaseModel):
     max_pairs: int = Field(default=40, ge=1, le=200)
 
 
+class QueryBatchRequest(BaseModel):
+    """Multiple grounded Q&A calls sharing scope (same ``doc_id`` / retrieval depth)."""
+
+    questions: list[str] = Field(..., min_length=1, max_length=24)
+    doc_id: str | None = None
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class QueryBatchItem(BaseModel):
+    question: str
+    answer: str
+    sources: list[dict[str, Any]]
+
+
+class QueryBatchResponse(BaseModel):
+    items: list[QueryBatchItem]
+    retrieval_top_k_per_item: int
+
+
+class DocumentSummaryRequest(BaseModel):
+    """Retrieve chunks for one ``doc_id`` then synthesize a grounded summary (local LLM / Ollama)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="parties obligations definitions material terms dates consideration indemnity title",
+        min_length=1,
+        max_length=4000,
+    )
+    instruction: str = Field(
+        default="Produce a counsel-ready summary grounded only in the excerpts.",
+        min_length=1,
+        max_length=12000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class DocumentSummaryResponse(BaseModel):
+    doc_id: str
+    summary: str
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class OllamaEmbedProxyRequest(BaseModel):
+    """Forward to Ollama native ``POST /api/embed``; returns full daemon JSON."""
+
+    input: list[str] = Field(..., min_length=1, max_length=64)
+    model: str | None = Field(default=None, description="Defaults to OLLAMA_EMBEDDING_MODEL")
+    truncate: bool | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
 class RunSummaryOut(BaseModel):
     id: str
     created_at: str

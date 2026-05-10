@@ -21,6 +21,8 @@ from legal_intel.api.schemas import (
     AnalyzeResponse,
     BatchIngestResponse,
     DocumentPurgeBatchRequest,
+    DocumentSummaryRequest,
+    DocumentSummaryResponse,
     EmbeddingBatchRequest,
     EmbeddingBatchResponse,
     EmbeddingSimilarityRequest,
@@ -30,8 +32,12 @@ from legal_intel.api.schemas import (
     LocalPathIngestRequest,
     NearDuplicateChunksRequest,
     OllamaChatRequest,
+    OllamaEmbedProxyRequest,
     OllamaGenerateRequest,
     OllamaShowRequest,
+    QueryBatchItem,
+    QueryBatchRequest,
+    QueryBatchResponse,
     QueryRequest,
     QueryResponse,
     RetrieveOnlyResponse,
@@ -54,7 +60,7 @@ from legal_intel.persistence.runs import (
     vacuum_sqlite_file,
 )
 from legal_intel.pipeline import doc_id_from_pdf_bytes, ingest_pdf_with_stats
-from legal_intel.prompts import QUERY_SYSTEM, format_context_block
+from legal_intel.prompts import QUERY_SYSTEM, SUMMARIZE_SYSTEM, format_context_block
 from legal_intel.rag.store import LegalVectorStore
 from legal_intel.runtime.api_metrics import bucket_path as metrics_bucket_path
 from legal_intel.runtime.api_metrics import incr_request as metrics_incr_request
@@ -63,6 +69,8 @@ from legal_intel.runtime.build_info import gather_build_info
 from legal_intel.runtime.device_profile import gather_device_profile
 from legal_intel.runtime.chunk_near_duplicate import near_duplicate_chunk_pairs
 from legal_intel.runtime.embedding_similarity import similarity_for_text_pair
+from legal_intel.runtime.ollama_embed_raw_proxy import ollama_native_embed_raw
+from legal_intel.runtime.process_info import gather_api_process_snapshot
 from legal_intel.runtime.ollama_chat_proxy import ollama_native_chat
 from legal_intel.runtime.ollama_generate_proxy import ollama_native_generate
 from legal_intel.runtime.ollama_show_proxy import ollama_native_show
@@ -126,6 +134,11 @@ def _effective_retrieval_limit(body: QueryRequest) -> int:
     if body.limit is not None:
         return body.limit
     return s.retrieval_top_k
+
+
+def _batch_retrieval_limit(limit: int | None) -> int:
+    s = get_settings()
+    return limit if limit is not None else s.retrieval_top_k
 
 
 def _rag_sources_from_hits(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -208,7 +221,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.11.0",
+    version="0.12.0",
 )
 
 _origins = _cors_origins()
@@ -566,10 +579,47 @@ def ollama_show_model(body: OllamaShowRequest) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
+@app.post("/v1/ollama/embed-proxy")
+def ollama_embed_proxy(body: OllamaEmbedProxyRequest) -> dict[str, Any]:
+    """Raw passthrough to Ollama ``POST /api/embed`` — full JSON response (daemon debugging)."""
+    max_chars = 64_000
+    cleaned: list[str] = []
+    for i, t in enumerate(body.input):
+        ts = (t or "").strip()
+        if not ts:
+            raise HTTPException(status_code=400, detail=f"input[{i}] is empty")
+        if len(ts) > max_chars:
+            raise HTTPException(
+                status_code=400,
+                detail=f"input[{i}] exceeds {max_chars} characters",
+            )
+        cleaned.append(ts)
+    s = get_settings()
+    model = (body.model or "").strip() or s.ollama_embedding_model
+    payload: dict[str, Any] = {"model": model, "input": cleaned}
+    if body.truncate is not None:
+        payload["truncate"] = body.truncate
+    payload.update(body.options)
+    try:
+        return ollama_native_embed_raw(
+            s.ollama_base_url,
+            payload,
+            timeout_seconds=max(120.0, s.ollama_probe_timeout_seconds * 60),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
 @app.get("/v1/system/snapshot")
 def system_snapshot(top_n: int = 8) -> dict[str, Any]:
     """Load averages (Unix) + optional psutil top RSS processes."""
     return gather_system_snapshot(top_n=min(max(top_n, 1), 32))
+
+
+@app.get("/v1/system/process")
+def api_process_metrics() -> dict[str, Any]:
+    """RSS / threads for this API worker process (optional psutil)."""
+    return gather_api_process_snapshot()
 
 
 @app.post("/v1/maintenance/optimize-sqlite")
@@ -951,6 +1001,26 @@ def rag_near_duplicate_chunks(body: NearDuplicateChunksRequest) -> dict[str, Any
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
+@app.post("/v1/rag/document-summary", response_model=DocumentSummaryResponse)
+def rag_document_summary(body: DocumentSummaryRequest) -> DocumentSummaryResponse:
+    """Scoped retrieval + synthesis summary — uses ``synthesis`` model routing (Ollama when configured)."""
+    store = LegalVectorStore()
+    s = get_settings()
+    lim = body.limit if body.limit is not None else s.retrieval_top_k
+    did = body.doc_id.strip()
+    rq = body.retrieval_query.strip()
+    hits = store.search(rq, limit=lim, doc_id=did)
+    ctx = format_context_block(hits)
+    user = f"INSTRUCTION:\n{body.instruction.strip()}\n\nCONTEXT EXCERPTS:\n{ctx}"
+    summary = chat_complete(SUMMARIZE_SYSTEM, user, temperature=0.08, task="synthesis")
+    return DocumentSummaryResponse(
+        doc_id=did,
+        summary=summary,
+        sources=_rag_sources_from_hits(hits),
+        retrieval_top_k=lim,
+    )
+
+
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
 def analyze(body: AnalyzeRequest) -> AnalyzeResponse:
     if body.domain == "india_re" and not body.doc_ids:
@@ -1059,6 +1129,24 @@ def rag_query_stream(body: QueryRequest):
             yield _sse_payload({"event": "error", "message": str(e)})
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/query/batch", response_model=QueryBatchResponse)
+def rag_query_batch(body: QueryBatchRequest) -> QueryBatchResponse:
+    """Grounded Q&A for multiple questions with shared ``doc_id`` / retrieval depth (sequential LLM calls)."""
+    lim = _batch_retrieval_limit(body.limit)
+    store = LegalVectorStore()
+    items: list[QueryBatchItem] = []
+    for raw_q in body.questions:
+        q = (raw_q or "").strip()
+        if not q:
+            raise HTTPException(status_code=400, detail="Each question must be non-empty")
+        hits = store.search(q, limit=lim, doc_id=body.doc_id)
+        ctx = format_context_block(hits)
+        user = f"QUESTION:\n{q}\n\nCONTEXT EXCERPTS:\n{ctx}"
+        ans = chat_complete(QUERY_SYSTEM, user, temperature=0.05, task="specialist")
+        items.append(QueryBatchItem(question=q, answer=ans, sources=_rag_sources_from_hits(hits)))
+    return QueryBatchResponse(items=items, retrieval_top_k_per_item=lim)
 
 
 @app.get("/v1/disk")

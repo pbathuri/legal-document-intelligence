@@ -32,6 +32,11 @@ Output markdown with: Direct answer, Supporting excerpts (quote short passages w
 and Limitations (what is not stated in CONTEXT). If CONTEXT is empty or irrelevant, say so clearly.
 Never invent statute numbers, case names, or clauses not present in CONTEXT."""
 
+SUMMARIZE_SYSTEM = """You summarize retrieved legal document excerpts for a qualified reviewer.
+Produce markdown with: Executive summary (concise bullets), Key parties / instruments / dates if stated,
+Material obligations or property interests (only if in excerpts), Red flags or gaps in the excerpts themselves.
+Use ONLY the CONTEXT. If excerpts are empty or insufficient, say so clearly — do not invent facts or citations."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

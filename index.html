@@ -301,6 +301,7 @@
         <button type="button" id="btnPrometheus">Metrics (Prometheus)</button>
         <button type="button" id="btnMemoRun">Open run memo (.md)</button>
         <button type="button" id="btnSysSnap" title="GET /v1/system/snapshot">System snapshot</button>
+        <button type="button" id="btnProcInfo" title="GET /v1/system/process">API process</button>
         <button type="button" id="btnVacuumSqlite" title="POST /v1/maintenance/vacuum-sqlite">Vacuum runs DB</button>
         <button type="button" id="btnOptimizeSqlite" title="POST /v1/maintenance/optimize-sqlite">Optimize runs DB</button>
       </div>
@@ -382,6 +383,22 @@
     </div>
 
     <div class="card" style="margin-top:1rem;">
+      <h2>Batch grounded Q&amp;A</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;">One question per line → <code>POST /v1/query/batch</code> (≤24 lines). Shared optional scope below.</p>
+      <label for="batchQ">Questions (one per line)</label>
+      <textarea id="batchQ" placeholder="What is the governing law?&#10;What is the liability cap?"
+        style="min-height:88px;"></textarea>
+      <label for="batchDoc" style="margin-top:0.65rem;">Scope to doc id (optional)</label>
+      <input type="text" id="batchDoc" placeholder="Same as single Q&A" autocomplete="off" />
+      <label for="batchLimit" style="margin-top:0.65rem;">Retrieval limit (optional)</label>
+      <input type="number" id="batchLimit" min="1" max="128" placeholder="Server default" style="max-width:12rem;" />
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnQueryBatch">Run batch</button>
+      </div>
+      <pre class="sources" id="batchOut" style="margin-top:0.65rem;display:none;max-height:280px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
       <h2>Embedding similarity</h2>
       <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;">Uses the same embedding backend as RAG (<code>POST /v1/embeddings/similarity</code>).</p>
       <label for="simA">Text A</label>
@@ -403,6 +420,36 @@
         <button type="button" class="primary" id="btnEmbedBatch">Embed lines</button>
       </div>
       <pre class="sources" id="embedBatchOut" style="margin-top:0.65rem;display:none;max-height:240px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>RAG · document summary</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;"><code>POST /v1/rag/document-summary</code> — retrieves chunks for one <code>doc_id</code>, then synthesis-model summary (Ollama when configured).</p>
+      <label for="sumDocId">doc_id</label>
+      <input type="text" id="sumDocId" placeholder="Indexed document id" autocomplete="off" />
+      <label for="sumRq" style="margin-top:0.65rem;">Retrieval query</label>
+      <input type="text" id="sumRq"
+        value="parties obligations definitions material terms dates consideration indemnity title"
+        autocomplete="off" />
+      <label for="sumInstr" style="margin-top:0.65rem;">Instruction</label>
+      <textarea id="sumInstr" style="min-height:72px;">Produce a counsel-ready summary grounded only in the excerpts.</textarea>
+      <label for="sumLimit" style="margin-top:0.65rem;">Retrieval limit (optional)</label>
+      <input type="number" id="sumLimit" min="1" max="128" placeholder="Server default" style="max-width:12rem;" />
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnDocSummary">Summarize</button>
+      </div>
+      <pre class="sources" id="sumOut" style="margin-top:0.65rem;display:none;max-height:280px;"></pre>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>Ollama embed proxy</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;">Non-empty lines → native daemon <code>POST /api/embed</code> (<code>/v1/ollama/embed-proxy</code>). Uses <code>OLLAMA_EMBEDDING_MODEL</code> if model omitted.</p>
+      <textarea id="embedProxyLines" placeholder="Line one to embed&#10;Line two"
+        style="min-height:72px;"></textarea>
+      <div class="row" style="margin-top:0.65rem;">
+        <button type="button" class="primary" id="btnEmbedProxy">Call /api/embed</button>
+      </div>
+      <pre class="sources" id="embedProxyOut" style="margin-top:0.65rem;display:none;max-height:260px;"></pre>
     </div>
 
     <div class="card" style="margin-top:1rem;">
@@ -824,6 +871,16 @@
       }
     };
 
+    $("btnProcInfo").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/system/process");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
     $("btnVacuumSqlite").onclick = async () => {
       try {
         const res = await fetch(apiUrl("/v1/maintenance/vacuum-sqlite"), { method: "POST" });
@@ -1183,6 +1240,75 @@
         );
       } catch (e) {
         $("queryErr").textContent = e.message || String(e);
+      }
+    };
+
+    $("btnQueryBatch").onclick = async () => {
+      try {
+        const lines = $("batchQ").value.split("\n").map((s) => s.trim()).filter(Boolean);
+        if (!lines.length) throw new Error("Enter at least one question line.");
+        const payload = {
+          questions: lines.slice(0, 24),
+          doc_id: $("batchDoc").value.trim() || null,
+        };
+        const limRaw = ($("batchLimit").value || "").trim();
+        if (limRaw !== "") {
+          const n = parseInt(limRaw, 10);
+          if (!Number.isFinite(n) || n < 1 || n > 128) throw new Error("Limit must be 1–128.");
+          payload.limit = n;
+        }
+        const out = await fetchJson("/v1/query/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        $("batchOut").style.display = "block";
+        $("batchOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnDocSummary").onclick = async () => {
+      try {
+        const doc_id = $("sumDocId").value.trim();
+        if (!doc_id) throw new Error("Enter doc_id.");
+        const payload = {
+          doc_id,
+          retrieval_query: $("sumRq").value.trim() || "parties obligations terms",
+          instruction: $("sumInstr").value.trim() || "Summarize the document.",
+        };
+        const lr = ($("sumLimit").value || "").trim();
+        if (lr !== "") {
+          const n = parseInt(lr, 10);
+          if (!Number.isFinite(n) || n < 1 || n > 128) throw new Error("Limit must be 1–128.");
+          payload.limit = n;
+        }
+        const out = await fetchJson("/v1/rag/document-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        $("sumOut").style.display = "block";
+        $("sumOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    $("btnEmbedProxy").onclick = async () => {
+      try {
+        const lines = $("embedProxyLines").value.split("\n").map((s) => s.trim()).filter(Boolean);
+        if (!lines.length) throw new Error("Enter at least one non-empty line.");
+        const out = await fetchJson("/v1/ollama/embed-proxy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: lines.slice(0, 64) }),
+        });
+        $("embedProxyOut").style.display = "block";
+        $("embedProxyOut").textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
       }
     };
 
