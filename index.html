@@ -282,6 +282,12 @@
         <button type="button" id="btnDisk">Disk space</button>
         <button type="button" id="btnRuns">Recent runs</button>
         <button type="button" id="btnPreflight">Preflight</button>
+        <button type="button" id="btnMetrics">Metrics</button>
+        <button type="button" id="btnOllamaHost">Ollama host</button>
+        <button type="button" id="btnIndexedDocs">Indexed documents</button>
+        <button type="button" id="btnManifest">Upload manifest</button>
+        <button type="button" id="btnWarmupEmbed">Warmup embeddings</button>
+        <button type="button" id="btnSearchRuns">Search runs</button>
         <button type="button" id="btnExportRuns">Export runs (NDJSON)</button>
         <button type="button" id="btnMemoRun">Open run memo (.md)</button>
       </div>
@@ -530,6 +536,62 @@
     $("btnPreflight").onclick = async () => {
       try {
         const r = await fetchJson("/v1/preflight");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnMetrics").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/metrics");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnOllamaHost").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/ollama/host");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnIndexedDocs").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/documents");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnManifest").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/uploads/manifest?tail=40");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnWarmupEmbed").onclick = async () => {
+      try {
+        const res = await fetch(apiUrl("/v1/embeddings/warmup"), { method: "POST" });
+        const t = await res.text();
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = t;
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnSearchRuns").onclick = async () => {
+      try {
+        const q = window.prompt("Substring to search (query, domain, run id)", "") || "";
+        const r = await fetchJson("/v1/runs/search?" + new URLSearchParams({ q }));
         $("metaOut").style.display = "block";
         $("metaOut").textContent = JSON.stringify(r, null, 2);
       } catch (e) {

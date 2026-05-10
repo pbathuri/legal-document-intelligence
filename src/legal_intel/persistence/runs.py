@@ -96,6 +96,43 @@ def list_runs(*, db_path: Path, limit: int = 50) -> list[RunSummary]:
     return out
 
 
+def search_runs(*, db_path: Path, q: str, limit: int = 40) -> list[RunSummary]:
+    """Substring match on query text, domain, or run id (case-insensitive)."""
+    ln = (q or "").strip().lower()
+    if not ln:
+        return []
+    conn = _connect(db_path)
+    try:
+        init_schema(conn)
+        lim = min(limit, 200)
+        cur = conn.execute(
+            """
+            SELECT id, created_at, domain, query, doc_ids_json FROM diligence_runs
+            WHERE instr(lower(query), ?) > 0
+               OR instr(lower(domain), ?) > 0
+               OR instr(lower(id), ?) > 0
+            ORDER BY created_at DESC LIMIT ?
+            """,
+            (ln, ln, ln, lim),
+        )
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    out: list[RunSummary] = []
+    for r in rows:
+        doc_ids = json.loads(r["doc_ids_json"])
+        out.append(
+            RunSummary(
+                id=r["id"],
+                created_at=r["created_at"],
+                domain=r["domain"],
+                query=r["query"],
+                doc_ids=doc_ids if isinstance(doc_ids, list) else [],
+            )
+        )
+    return out
+
+
 def delete_run(*, db_path: Path, run_id: str) -> bool:
     conn = _connect(db_path)
     try:

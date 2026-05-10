@@ -305,3 +305,118 @@ def test_export_delete_run(tmp_path, monkeypatch):
         gr = client.get(f"/v1/runs/{rid}")
         assert gr.status_code == 404
     get_settings.cache_clear()
+
+
+def test_metrics_and_request_id(api_client):
+    r = api_client.get("/health", headers={"X-Request-ID": "trace-test-1"})
+    assert r.status_code == 200
+    assert r.headers.get("x-request-id") == "trace-test-1"
+    assert "x-process-time" in {k.lower() for k in r.headers.keys()}
+    m = api_client.get("/v1/metrics")
+    assert m.status_code == 200
+    body = m.json()
+    assert body["requests_total"] >= 2
+    assert "by_path_bucket" in body
+
+
+def test_documents_crud(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="dc1",
+        doc_label="a.pdf",
+        chunks=[("hello world clause", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.get("/v1/documents")
+    assert r.status_code == 200
+    docs = r.json()["documents"]
+    assert any(d["doc_id"] == "dc1" for d in docs)
+    ch = api_client.get("/v1/documents/dc1/chunks")
+    assert ch.status_code == 200
+    assert len(ch.json()["chunks"]) >= 1
+    d = api_client.delete("/v1/documents/dc1")
+    assert d.status_code == 200
+    assert d.json()["vectors_removed"] >= 1
+
+
+def test_embeddings_warmup(api_client):
+    r = api_client.post("/v1/embeddings/warmup")
+    assert r.status_code == 200
+    out = r.json()
+    assert out.get("ok") is True
+    assert out.get("dimension", 0) > 0
+
+
+def test_ollama_host(api_client):
+    r = api_client.get("/v1/ollama/host")
+    assert r.status_code == 200
+    body = r.json()
+    assert "origin" in body
+
+
+def test_upload_manifest_requires_persist(api_client):
+    r = api_client.get("/v1/uploads/manifest")
+    assert r.status_code == 400
+
+
+def test_upload_manifest_tail(tmp_path, monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_UPLOADS", "1")
+    monkeypatch.setenv("UPLOAD_STORAGE_DIR", str(tmp_path))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    (tmp_path / "manifest.jsonl").write_text(
+        '{"doc_id":"x","path":"/tmp/a.pdf"}\n', encoding="utf-8"
+    )
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.get("/v1/uploads/manifest?tail=5")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["exists"] is True
+        assert len(data["items"]) == 1
+        assert data["items"][0].get("doc_id") == "x"
+    get_settings.cache_clear()
+
+
+def test_runs_search(tmp_path, monkeypatch):
+    db = tmp_path / "search.db"
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("PERSIST_RUNS", "1")
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("PERSIST_UPLOADS", "0")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="s1",
+        doc_label="z.pdf",
+        chunks=[("Clause X.", {"page_start": 1, "page_end": 1})],
+    )
+    with TestClient(app) as client:
+        client.post(
+            "/v1/analyze",
+            json={"query": "UniqueSearchTokenABC indemnity", "domain": "mna"},
+        )
+        r = client.get("/v1/runs/search", params={"q": "UniqueSearchTokenABC"})
+        assert r.status_code == 200
+        assert len(r.json()) >= 1
+        r2 = client.get("/v1/runs/search", params={"q": ""})
+        assert r2.status_code == 200
+        assert r2.json() == []
+    get_settings.cache_clear()

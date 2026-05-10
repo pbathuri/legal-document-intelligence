@@ -115,6 +115,85 @@ class LegalVectorStore:
 
         return out
 
+    def scroll_chunks_for_document(
+        self,
+        doc_id: str,
+        *,
+        limit: int = 64,
+        cursor: str | None = None,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Paginated payload scan for one logical document (debugging / inspection)."""
+        flt = qm.Filter(must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))])
+        lim = max(1, min(limit, 256))
+        offset = cursor if cursor else None
+        records, next_off = self._client.scroll(
+            collection_name=self._collection,
+            scroll_filter=flt,
+            limit=lim,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+        rows: list[dict[str, Any]] = []
+        for r in records:
+            pl = dict(r.payload or {})
+            pl["point_id"] = str(r.id)
+            rows.append(pl)
+        next_cursor = None if next_off is None else str(next_off)
+        return rows, next_cursor
+
+    def aggregate_indexed_documents(self, *, max_points: int = 4000) -> list[dict[str, Any]]:
+        """Distinct doc_id values seen in the collection (bounded scan)."""
+        cap = max(50, min(max_points, 50_000))
+        counts: dict[str, dict[str, Any]] = {}
+        offset = None
+        scanned = 0
+        while scanned < cap:
+            batch = min(512, cap - scanned)
+            records, offset = self._client.scroll(
+                collection_name=self._collection,
+                limit=batch,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not records:
+                break
+            for r in records:
+                scanned += 1
+                pl = r.payload or {}
+                did = pl.get("doc_id")
+                if not did:
+                    continue
+                ent = counts.setdefault(
+                    str(did),
+                    {"doc_id": str(did), "doc_label": pl.get("doc_label"), "chunk_count": 0},
+                )
+                ent["chunk_count"] = int(ent["chunk_count"]) + 1
+                if pl.get("doc_label"):
+                    ent["doc_label"] = pl["doc_label"]
+            if offset is None:
+                break
+        return sorted(counts.values(), key=lambda x: str(x["doc_id"]))
+
+    def delete_document_vectors(self, doc_id: str) -> int:
+        """Remove all chunks for doc_id; returns prior point count (exact filter count)."""
+        flt = qm.Filter(must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))])
+        try:
+            cnt = self._client.count(
+                collection_name=self._collection,
+                count_filter=flt,
+                exact=True,
+            )
+            n = int(getattr(cnt, "count", cnt))
+        except Exception:
+            n = 0
+        self._client.delete(
+            collection_name=self._collection,
+            points_selector=qm.FilterSelector(filter=flt),
+        )
+        return n
+
     def clear_collection(self) -> None:
         if self._client.collection_exists(self._collection):
             self._client.delete_collection(self._collection)

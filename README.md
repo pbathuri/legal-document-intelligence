@@ -67,12 +67,19 @@ legal-api
 2. Endpoints (selection):
    - `GET /health` — mock/live LLM, embedding provider, Qdrant, resolved multimodel names; when `LLM_PROVIDER=ollama`, lists models from local **Ollama** `/api/tags`
    - `GET /v1/preflight` — single JSON for ops: Qdrant ping, Ollama `/api/tags` + optional `/api/embed` probe, disk, `device` profile
-   - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local)
+   - `GET /v1/metrics` — in-process HTTP request totals + path buckets (UUID run ids normalized); resets on restart
+   - `GET /v1/ollama/host` — native daemon introspection: **`/api/version`** + **`/api/ps`** (running models on the machine)
+   - `POST /v1/embeddings/warmup` — forces embedding backend load (sentence-transformers or Ollama `/api/embed`)
+   - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
-   - `GET /v1/runs` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; NDJSON export; Markdown memo (`final_report`)
+   - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; NDJSON export; Markdown memo (`final_report`)
    - `GET /v1/disk` — free space on volume holding upload storage
    - `GET /v1/settings/effective` — full resolved config with **secrets redacted**
    - `GET /v1/qdrant/info` — collection existence + point count (uses same client as RAG, including in-process `:memory:`)
+   - `GET /v1/documents` — distinct indexed `doc_id` values (bounded payload scan)
+   - `GET /v1/documents/{doc_id}/chunks` — paginated chunk payloads for RAG debugging (`cursor` + `limit`)
+   - `DELETE /v1/documents/{doc_id}` — remove all vectors for that document from Qdrant
+   - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
    - `POST /v1/ingest/local` — JSON body `{ "path": "/absolute/file.pdf", "use_ocr": false }` — only if `LEGAL_INTEL_ALLOW_LOCAL_PATHS` lists allowed absolute directory prefixes (comma-separated)
    - `POST /v1/ingest/batch` — many PDFs in one request → `{ items[], errors[] }`

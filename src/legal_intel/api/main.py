@@ -7,6 +7,7 @@ import shutil
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -36,10 +37,13 @@ from legal_intel.persistence.runs import (
     insert_run,
     iter_runs_ndjson_lines,
     list_runs,
+    search_runs,
 )
 from legal_intel.pipeline import doc_id_from_pdf_bytes, ingest_pdf_with_stats
 from legal_intel.prompts import QUERY_SYSTEM, format_context_block
 from legal_intel.rag.store import LegalVectorStore
+from legal_intel.runtime.api_metrics import bucket_path as metrics_bucket_path
+from legal_intel.runtime.api_metrics import incr_request as metrics_incr_request
 from legal_intel.runtime.device_profile import gather_device_profile
 from legal_intel.runtime.local_paths import is_path_under_allowlist, parse_allow_prefixes
 from legal_intel.runtime.ollama_probe import (
@@ -47,8 +51,10 @@ from legal_intel.runtime.ollama_probe import (
     ollama_origin_from_openai_base,
 )
 from legal_intel.runtime.ollama_warnings import build_ollama_model_warnings
+from legal_intel.runtime.ollama_deep import gather_ollama_host_snapshot
 from legal_intel.runtime.preflight import gather_preflight
 from legal_intel.runtime.uploads import persist_pdf_bytes
+from legal_intel.runtime.uploads_manifest import tail_upload_manifest
 
 
 def _cors_origins() -> list[str]:
@@ -133,7 +139,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.6.0",
+    version="0.7.0",
 )
 
 _origins = _cors_origins()
@@ -151,6 +157,20 @@ async def add_process_time_header(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     response.headers["X-Process-Time"] = f"{time.perf_counter() - start:.4f}"
+    return response
+
+
+@app.middleware("http")
+async def api_metrics_middleware(request: Request, call_next):
+    metrics_incr_request(metrics_bucket_path(request.url.path))
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    rid = request.headers.get("x-request-id") or str(uuid.uuid4())
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
     return response
 
 
@@ -201,6 +221,36 @@ def health() -> HealthResponse:
 def preflight() -> dict[str, Any]:
     """Single payload for dashboards: Qdrant, Ollama tags/embed, disk, device."""
     return gather_preflight()
+
+
+@app.get("/v1/metrics")
+def metrics_json() -> dict[str, Any]:
+    """In-process HTTP request counters (resets on process restart)."""
+    from legal_intel.runtime.api_metrics import snapshot
+
+    return snapshot()
+
+
+@app.get("/v1/ollama/host")
+def ollama_host_probe() -> dict[str, Any]:
+    """Native Ollama daemon state: ``/api/version`` + ``/api/ps`` (running models on device)."""
+    s = get_settings()
+    return gather_ollama_host_snapshot(
+        s.ollama_base_url,
+        timeout_seconds=max(5.0, s.ollama_probe_timeout_seconds * 3),
+    )
+
+
+@app.post("/v1/embeddings/warmup")
+def embeddings_warmup() -> dict[str, Any]:
+    """Force-load the configured embedding backend (ST download or Ollama /api/embed)."""
+    from legal_intel.rag.embeddings import make_embedding_model
+
+    m = make_embedding_model()
+    t0 = time.perf_counter()
+    _ = m.encode(["legal_intel embedding warmup probe."])
+    dt = time.perf_counter() - t0
+    return {"ok": True, "dimension": m.dimension, "elapsed_seconds": round(dt, 4)}
 
 
 @app.get("/v1/runtime", response_model=RuntimeOut)
@@ -294,6 +344,25 @@ def export_runs_ndjson(limit: int = 50_000):
         )
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+@app.get("/v1/runs/search", response_model=list[RunSummaryOut])
+def search_diligence_runs(q: str = "", limit: int = 40) -> list[RunSummaryOut]:
+    """Search persisted runs by substring (query text, domain, or id)."""
+    s = get_settings()
+    if not s.persist_runs:
+        return []
+    rows = search_runs(db_path=Path(s.runs_db_path), q=q, limit=min(limit, 200))
+    return [
+        RunSummaryOut(
+            id=r.id,
+            created_at=r.created_at,
+            domain=r.domain,
+            query=r.query,
+            doc_ids=r.doc_ids,
+        )
+        for r in rows
+    ]
 
 
 def _memo_markdown_from_run(row: dict[str, Any]) -> str:
@@ -441,6 +510,53 @@ def qdrant_collection_info() -> dict[str, Any]:
         }
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Qdrant unreachable: {e}") from e
+
+
+@app.get("/v1/uploads/manifest")
+def uploads_manifest(tail: int = 80) -> dict[str, Any]:
+    """Tail of ``manifest.jsonl`` next to persisted uploads (ingest audit trail)."""
+    s = get_settings()
+    if not s.persist_uploads:
+        raise HTTPException(status_code=400, detail="Upload persistence disabled")
+    return tail_upload_manifest(s.upload_storage_dir, tail_lines=tail)
+
+
+@app.get("/v1/documents")
+def list_indexed_documents(max_points: int = 4000) -> dict[str, Any]:
+    """Distinct indexed documents by scanning chunk payloads (bounded work)."""
+    store = LegalVectorStore()
+    mp = max(100, min(max_points, 50_000))
+    docs = store.aggregate_indexed_documents(max_points=mp)
+    return {"documents": docs, "scan_budget_points": mp}
+
+
+@app.get("/v1/documents/{doc_id}/chunks")
+def get_document_chunks(
+    doc_id: str,
+    limit: int = 64,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Paginated chunk payloads for debugging retrieval (large ``text`` fields may truncate)."""
+    store = LegalVectorStore()
+    rows, next_c = store.scroll_chunks_for_document(doc_id, limit=limit, cursor=cursor)
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        item = dict(r)
+        t = item.get("text")
+        if isinstance(t, str) and len(t) > 8000:
+            item["text"] = t[:8000] + "\n… [truncated]"
+        out.append(item)
+    return {"doc_id": doc_id, "chunks": out, "next_cursor": next_c}
+
+
+@app.delete("/v1/documents/{doc_id}")
+def purge_document_vectors(doc_id: str) -> dict[str, Any]:
+    """Remove all vectors for ``doc_id`` from Qdrant (does not delete SQLite runs)."""
+    if not doc_id.strip():
+        raise HTTPException(status_code=400, detail="Missing doc_id")
+    store = LegalVectorStore()
+    n = store.delete_document_vectors(doc_id)
+    return {"doc_id": doc_id, "vectors_removed": n}
 
 
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
