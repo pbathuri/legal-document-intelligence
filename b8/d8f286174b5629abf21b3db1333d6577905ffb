@@ -1,0 +1,57 @@
+src/legal_intel/prompts.py
+  s_c7571ff3b984be::t_38fda0db3a6dc5 74-99
+  s_c7571ff3b984be::t_db74559b47d3ca 45-62
+src/legal_intel/persistence/runs.py
+  s_c7571ff3b984be::t_ca266563e1d778 168-194
+src/legal_intel/llm/client.py
+  s_c7571ff3b984be::t_11c26dbafbdf53 3
+  s_c7571ff3b984be::t_0917bac85977db 192-199
+README.md
+  s_c7571ff3b984be::t_2302349b44158e 111
+  s_c7571ff3b984be::t_db53c25022731c 118
+  s_c7571ff3b984be::t_62efe7d018972f 123
+  s_c7571ff3b984be::t_d3d0c2c528f1e4 102
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_d6ee5d35406a1a 285-339
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_88e721dc6bc113 341
+  s_c7571ff3b984be::t_1896bca50828fd 810-823
+  s_c7571ff3b984be::t_2d8c65767a33c6 1384-1409
+  s_c7571ff3b984be::t_e0dda08e1b3115 58-63
+  s_c7571ff3b984be::t_9cb9cbe5b9baea 1290-1307
+  s_c7571ff3b984be::t_298cd1fe4d5a2a 41
+  s_c7571ff3b984be::t_4090a11c29e906 76
+  s_c7571ff3b984be::t_8b75ac6fd7005e 80,82,86
+  s_c7571ff3b984be::t_bed51bb7593775 25-26
+  s_c7571ff3b984be::t_336dc567ff8a36 721-738
+  s_c7571ff3b984be::t_aed903ca9da4be 46
+  s_c7571ff3b984be::t_58a8f77e9d76ce 54
+  s_c7571ff3b984be::t_6d3b4cb96f741b 229-277
+index.html
+  s_c7571ff3b984be::t_06f0b36ddc7350 1035-1048
+  s_c7571ff3b984be::t_b123c08038a200 1570-1590
+  s_c7571ff3b984be::t_bdf3dd62927bc7 388
+  s_c7571ff3b984be::t_5c6b64c65f9732 1065-1080
+  s_c7571ff3b984be::t_e9e9d93d8b6e1c 480-495
+  s_c7571ff3b984be::t_5e26bb18580e7b 320-325
+  s_c7571ff3b984be::t_8f860a825f6272 312
+  s_c7571ff3b984be::t_aaa78ac0123b54 1341-1369
+tests/test_api.py
+  s_c7571ff3b984be::t_eda9d70b27c84a 1195-1303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "b8d8f286174b5629abf21b3db1333d6577905ffb",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
