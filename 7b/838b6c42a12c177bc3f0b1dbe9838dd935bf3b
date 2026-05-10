@@ -1,0 +1,38 @@
+README.md
+  s_c7571ff3b984be::t_8ba96473718dff 51
+  s_c7571ff3b984be::t_97659ebed80f33 21-43
+src/legal_intel/training/gan_latent.py
+  s_c7571ff3b984be::t_1159b064944f87 1-208
+src/legal_intel/training/ollama_synthetic.py
+  s_c7571ff3b984be::t_b5be406689f15e 1-14,16-19,21-190,192-242,244-262,264,266-268,273-297
+  s_c7571ff3b984be::t_37e656fa980b52 243
+  s_c7571ff3b984be::t_daf8a9f4ba8a2e 191
+  s_c7571ff3b984be::t_7a02eb448477ab 15,20
+  s_c7571ff3b984be::t_7a86ed1da2d92f 269
+  s_c7571ff3b984be::t_4b2f47e0fefd46 263,265,270-272
+src/legal_intel/training/gan_cli.py
+  s_c7571ff3b984be::t_d11eb6f527d8ed 1-114
+tests/test_training_synthetic.py
+  s_c7571ff3b984be::t_863a2a37359721 1-22,26-36,46-59
+  s_c7571ff3b984be::t_13edf6ba9405da 23-25
+  s_c7571ff3b984be::t_5ed8bfc5d59752 37-45
+pyproject.toml
+  s_c7571ff3b984be::t_b32c6df9359bb6 76-79
+  s_c7571ff3b984be::t_5a9eebfa9ff9ab 86-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "7b838b6c42a12c177bc3f0b1dbe9838dd935bf3b",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
