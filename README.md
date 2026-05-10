@@ -18,6 +18,29 @@ LEGAL_INTEL_MOCK_LLM=1 QDRANT_URL=:memory: pytest -q
 LEGAL_INTEL_MOCK_LLM=1 QDRANT_URL=:memory: streamlit run streamlit_app.py
 ```
 
+### Ollama + GAN-assisted synthetic training JSONL
+
+Classical **GAN** text generation is brittle; this repo uses a **small embedding-space GAN** only to diversify **latent scenario knobs**, then uses **Ollama** (rotating across every model returned by `GET /api/tags`) to write fictional deeds/contracts into Alpaca-style **`instruction` / `input` / `output`** rows for LoRA/SFT.
+
+1. **Train the GAN checkpoint** (requires PyTorch):
+
+   ```bash
+   pip install -e ".[gan]"
+   legal-gan-embed --out data/synthetic/gan_generator.pt
+   # Optional: anchor embeddings on real-ish snippets — seed-jsonl with long "input" fields
+   legal-gan-embed --seed-jsonl data/training/train.jsonl --out data/synthetic/gan_generator.pt
+   ```
+
+2. **Generate synthetic JSONL with Ollama** (daemon must be running; pull models first, e.g. `ollama pull llama3.2`):
+
+   ```bash
+   legal-synth-ollama --n 24 --out data/synthetic/ollama_synth.jsonl --domain india_re
+   # Drive prompts from GAN latents:
+   legal-synth-ollama --gan-checkpoint data/synthetic/gan_generator.pt --n 24 --out data/synthetic/ollama_gan.jsonl
+   ```
+
+3. **Merge into the training bundle**: copy or symlink the JSONL under `data/raw/`, or concatenate into `data/raw/synthetic.jsonl`, then run `legal-train-prep --data-dir data/raw --output-dir data/training` as usual.
+
 ### Scrape + build training data
 
 ```bash
@@ -25,7 +48,7 @@ python -m legal_intel.scraper.cli igrs --max-results 20 --training --output data
 python -m legal_intel.training.prepare --data-dir data/raw --output-dir data/training
 ```
 
-Equivalent entry points: `legal-scrape …`, `legal-train-prep …`. Optional extras: `pip install -e ".[dev,scraping]"` if you use **scrapling**-backed paths; demo JSON under `data/raw/` works offline.
+Equivalent entry points: `legal-scrape …`, `legal-train-prep …`, `legal-gan-embed …`, `legal-synth-ollama …`. Optional extras: `pip install -e ".[dev,scraping]"` if you use **scrapling**-backed paths; demo JSON under `data/raw/` works offline.
 
 ### On MI300X: fine-tune and benchmark
 

@@ -73,12 +73,18 @@ gpu = [
     "vllm",
     "torch",
 ]
+gan = [
+    # Embedding-space GAN for synthetic latent seeds (pairs with legal-synth-ollama)
+    "torch>=2.0",
+]
 
 [project.scripts]
 legal-diligence = "legal_intel.cli:main"
 legal-scrape = "legal_intel.scraper.cli:main"
 legal-scrape-bulk = "legal_intel.scraper.bulk_cli:main"
 legal-train-prep = "legal_intel.training.prepare:main"
+legal-synth-ollama = "legal_intel.training.ollama_synthetic:main"
+legal-gan-embed = "legal_intel.training.gan_cli:main"
 legal-api = "legal_intel.api.cli:main"
 
 [tool.setuptools.packages.find]
