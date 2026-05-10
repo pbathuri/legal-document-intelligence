@@ -75,9 +75,11 @@ legal-api
    - `GET /v1/metrics/prometheus` — Prometheus text exposition for scraping
    - `GET /v1/ollama/host` — native daemon introspection: **`/api/version`** + **`/api/ps`** (running models on the machine)
    - `POST /v1/embeddings/warmup` — forces embedding backend load (sentence-transformers or Ollama `/api/embed`)
+   - `POST /v1/embeddings/embed-texts` — batch vectors for up to **48** strings (same embedding backend as RAG; large payloads — use for pipelines/agents on-device)
    - `POST /v1/embeddings/similarity` — JSON `{ "text_a", "text_b" }` → cosine similarity + embedding dimension (same backend as RAG)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
+   - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
    - `GET /v1/disk` — free space on volume holding upload storage
    - `GET /v1/settings/effective` — full resolved config with **secrets redacted**
@@ -92,9 +94,10 @@ legal-api
    - `POST /v1/ingest/batch` — many PDFs in one request → `{ items[], errors[] }`
    - `POST /v1/analyze` — full graph run; returns optional `run_id` when persistence enabled
    - `POST /v1/analyze/stream` — **SSE** (`text/event-stream`) LangGraph step updates + final merged state
-   - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources)
-   - `POST /v1/query/retrieve-only` — same retrieval + **`formatted_context`** as `/v1/query`, but **no LLM** (sources + context only)
+   - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources); optional JSON **`limit`** (1–128) overrides **`RETRIEVAL_TOP_K`** for that call
+   - `POST /v1/query/retrieve-only` — same retrieval + **`formatted_context`** as `/v1/query`, but **no LLM** (sources + context only); supports **`limit`** override
    - `POST /v1/ollama/generate` — forwards non-streaming requests to Ollama’s native **`POST /api/generate`** (model, prompt, optional `system`, `options`; uses origin from `OLLAMA_BASE_URL`)
+   - `POST /v1/ollama/show` — Ollama **`POST /api/show`** (inspect model template, parameters, etc.)
    - `GET /v1/system/snapshot` — Unix load averages + optional **psutil** top RSS processes (`top_n` query param)
    - `POST /v1/maintenance/vacuum-sqlite` — runs **`VACUUM`** on the runs SQLite DB when **`PERSIST_RUNS=1`** (returns before/after file sizes)
 

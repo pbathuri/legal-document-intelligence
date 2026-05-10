@@ -592,6 +592,108 @@ def test_ollama_generate_stream_rejected(api_client):
     assert r.status_code == 400
 
 
+def test_runs_stats_endpoint(api_client):
+    r = api_client.get("/v1/runs/stats")
+    assert r.status_code == 200
+    body = r.json()
+    assert "row_count" in body
+    assert "by_domain" in body
+    assert "db_path" in body
+
+
+def test_runs_stats_after_persist(tmp_path, monkeypatch):
+    db = tmp_path / "stats.db"
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("DILIGENCE_DOMAIN", "mna")
+    monkeypatch.setenv("PERSIST_UPLOADS", "0")
+    monkeypatch.setenv("PERSIST_RUNS", "1")
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="st1",
+        doc_label="z.pdf",
+        chunks=[("Consideration is fifty dollars.", {"page_start": 1, "page_end": 1})],
+    )
+    with TestClient(app) as client:
+        client.post(
+            "/v1/analyze",
+            json={"query": "Payment?", "domain": "mna"},
+        )
+        st = client.get("/v1/runs/stats").json()
+        assert st["row_count"] >= 1
+        assert st["by_domain"].get("mna", 0) >= 1
+        assert st["created_at_min"] and st["created_at_max"]
+    get_settings.cache_clear()
+
+
+def test_embeddings_embed_texts(api_client):
+    r = api_client.post(
+        "/v1/embeddings/embed-texts",
+        json={"texts": ["first passage about leases.", "second passage about leases."]},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 2
+    assert len(data["vectors"]) == 2
+    assert data["dimension"] > 0
+
+
+def test_query_retrieve_respects_limit(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="lim1",
+        doc_label="x.pdf",
+        chunks=[
+            ("alpha indemnity clause one.", {"page_start": 1, "page_end": 1}),
+            ("beta indemnity clause two.", {"page_start": 2, "page_end": 2}),
+        ],
+    )
+    r = api_client.post(
+        "/v1/query/retrieve-only",
+        json={"question": "indemnity clause", "doc_id": "lim1", "limit": 1},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["retrieval_top_k"] == 1
+    assert len(body["sources"]) == 1
+
+
+def test_ollama_show_proxied(monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from unittest.mock import patch
+
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with patch(
+        "legal_intel.api.main.ollama_native_show",
+        return_value={"license": "MIT", "parameters": "9B"},
+    ):
+        with TestClient(app) as client:
+            r = client.post("/v1/ollama/show", json={"model": "dummy"})
+            assert r.status_code == 200
+            assert r.json().get("license") == "MIT"
+    get_settings.cache_clear()
+
+
 def test_ollama_generate_proxied(monkeypatch):
     monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
     monkeypatch.setenv("QDRANT_URL", ":memory:")

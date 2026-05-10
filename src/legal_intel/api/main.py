@@ -21,12 +21,15 @@ from legal_intel.api.schemas import (
     AnalyzeResponse,
     BatchIngestResponse,
     DocumentPurgeBatchRequest,
+    EmbeddingBatchRequest,
+    EmbeddingBatchResponse,
     EmbeddingSimilarityRequest,
     EmbeddingSimilarityResponse,
     HealthResponse,
     IngestResponse,
     LocalPathIngestRequest,
     OllamaGenerateRequest,
+    OllamaShowRequest,
     QueryRequest,
     QueryResponse,
     RetrieveOnlyResponse,
@@ -39,6 +42,7 @@ from legal_intel.llm.client import chat_complete, chat_stream, resolve_model_for
 from legal_intel.persistence.runs import (
     delete_run,
     export_runs_json_array,
+    gather_run_statistics,
     get_run,
     insert_run,
     iter_runs_ndjson_lines,
@@ -56,6 +60,7 @@ from legal_intel.runtime.build_info import gather_build_info
 from legal_intel.runtime.device_profile import gather_device_profile
 from legal_intel.runtime.embedding_similarity import similarity_for_text_pair
 from legal_intel.runtime.ollama_generate_proxy import ollama_native_generate
+from legal_intel.runtime.ollama_show_proxy import ollama_native_show
 from legal_intel.runtime.system_snapshot import gather_system_snapshot
 from legal_intel.runtime.local_paths import is_path_under_allowlist, parse_allow_prefixes
 from legal_intel.runtime.ollama_probe import (
@@ -107,6 +112,13 @@ def _audit_prefixes() -> tuple[str, ...]:
         "/v1/ollama",
         "/v1/maintenance",
     )
+
+
+def _effective_retrieval_limit(body: QueryRequest) -> int:
+    s = get_settings()
+    if body.limit is not None:
+        return body.limit
+    return s.retrieval_top_k
 
 
 def _rag_sources_from_hits(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -189,7 +201,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.9.0",
+    version="0.10.0",
 )
 
 _origins = _cors_origins()
@@ -360,6 +372,37 @@ def embeddings_warmup() -> dict[str, Any]:
     return {"ok": True, "dimension": m.dimension, "elapsed_seconds": round(dt, 4)}
 
 
+@app.post("/v1/embeddings/embed-texts", response_model=EmbeddingBatchResponse)
+def embedding_embed_texts(body: EmbeddingBatchRequest) -> EmbeddingBatchResponse:
+    """Batch encode via the configured embedding backend (device-local Ollama or sentence-transformers)."""
+    max_chars = 64_000
+    cleaned: list[str] = []
+    for i, t in enumerate(body.texts):
+        ts = (t or "").strip()
+        if not ts:
+            raise HTTPException(status_code=400, detail=f"texts[{i}] is empty")
+        if len(ts) > max_chars:
+            raise HTTPException(
+                status_code=400,
+                detail=f"texts[{i}] exceeds {max_chars} characters",
+            )
+        cleaned.append(ts)
+    from legal_intel.rag.embeddings import make_embedding_model
+
+    s = get_settings()
+    m = make_embedding_model()
+    raw = m.encode(cleaned)
+    vectors = [list(map(float, row)) for row in raw]
+    return EmbeddingBatchResponse(
+        dimension=m.dimension,
+        count=len(vectors),
+        embedding_provider=s.embedding_provider,
+        ollama_embedding_model=s.ollama_embedding_model,
+        embedding_model=s.embedding_model,
+        vectors=vectors,
+    )
+
+
 @app.post("/v1/embeddings/similarity", response_model=EmbeddingSimilarityResponse)
 def embedding_cosine_similarity(body: EmbeddingSimilarityRequest) -> EmbeddingSimilarityResponse:
     """Cosine similarity between two texts using the active embedding backend (local)."""
@@ -434,6 +477,22 @@ def ollama_generate_native(body: OllamaGenerateRequest) -> dict[str, Any]:
         return ollama_native_generate(
             s.ollama_base_url,
             payload,
+            timeout_seconds=max(60.0, s.ollama_probe_timeout_seconds * 30),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@app.post("/v1/ollama/show")
+def ollama_show_model(body: OllamaShowRequest) -> dict[str, Any]:
+    """Native Ollama ``POST /api/show`` — model parameters, template, license (local daemon)."""
+    s = get_settings()
+    try:
+        return ollama_native_show(
+            s.ollama_base_url,
+            body.model.strip(),
             timeout_seconds=max(60.0, s.ollama_probe_timeout_seconds * 30),
         )
     except ValueError as e:
@@ -518,6 +577,13 @@ def agents_manifest() -> dict[str, Any]:
             },
         },
     }
+
+
+@app.get("/v1/runs/stats")
+def diligence_runs_statistics() -> dict[str, Any]:
+    """SQLite aggregates for the configured runs database path (works even when persistence is off)."""
+    s = get_settings()
+    return gather_run_statistics(db_path=Path(s.runs_db_path))
 
 
 @app.get("/v1/runs", response_model=list[RunSummaryOut])
@@ -854,9 +920,9 @@ def analyze_stream(body: AnalyzeRequest):
 
 @app.post("/v1/query", response_model=QueryResponse)
 def rag_query(body: QueryRequest) -> QueryResponse:
-    s = get_settings()
     store = LegalVectorStore()
-    hits = store.search(body.question, limit=s.retrieval_top_k, doc_id=body.doc_id)
+    lim = _effective_retrieval_limit(body)
+    hits = store.search(body.question, limit=lim, doc_id=body.doc_id)
     ctx = format_context_block(hits)
     user = f"QUESTION:\n{body.question}\n\nCONTEXT EXCERPTS:\n{ctx}"
     answer = chat_complete(QUERY_SYSTEM, user, temperature=0.05, task="specialist")
@@ -866,25 +932,24 @@ def rag_query(body: QueryRequest) -> QueryResponse:
 @app.post("/v1/query/retrieve-only", response_model=RetrieveOnlyResponse)
 def rag_retrieve_only(body: QueryRequest) -> RetrieveOnlyResponse:
     """Same retrieval path as grounded Q&A but **no LLM** — debug ranking and context assembly."""
-    s = get_settings()
     store = LegalVectorStore()
-    hits = store.search(body.question, limit=s.retrieval_top_k, doc_id=body.doc_id)
+    lim = _effective_retrieval_limit(body)
+    hits = store.search(body.question, limit=lim, doc_id=body.doc_id)
     ctx = format_context_block(hits)
     return RetrieveOnlyResponse(
         sources=_rag_sources_from_hits(hits),
         formatted_context=ctx,
-        retrieval_top_k=s.retrieval_top_k,
+        retrieval_top_k=lim,
     )
 
 
 @app.post("/v1/query/stream")
 def rag_query_stream(body: QueryRequest):
-    s = get_settings()
-
     def event_gen():
         try:
             store = LegalVectorStore()
-            hits = store.search(body.question, limit=s.retrieval_top_k, doc_id=body.doc_id)
+            lim = _effective_retrieval_limit(body)
+            hits = store.search(body.question, limit=lim, doc_id=body.doc_id)
             ctx = format_context_block(hits)
             src = _rag_sources_from_hits(hits)
             yield _sse_payload({"event": "sources", "sources": src})

@@ -223,6 +223,46 @@ def iter_runs_ndjson_lines(*, db_path: Path, limit: int = 50_000) -> Iterator[st
         conn.close()
 
 
+def gather_run_statistics(*, db_path: Path) -> dict[str, Any]:
+    """Aggregate counts and time range for the diligence runs SQLite file (creates empty schema if missing)."""
+    db_path = Path(db_path)
+    resolved = str(db_path.resolve())
+    if not db_path.is_file():
+        return {
+            "db_path": resolved,
+            "file_bytes": 0,
+            "row_count": 0,
+            "by_domain": {},
+            "created_at_min": None,
+            "created_at_max": None,
+        }
+    file_bytes = db_path.stat().st_size
+    conn = _connect(db_path)
+    try:
+        init_schema(conn)
+        row = conn.execute("SELECT COUNT(*) AS n FROM diligence_runs").fetchone()
+        row_count = int(row["n"]) if row else 0
+        cur = conn.execute(
+            "SELECT domain, COUNT(*) AS c FROM diligence_runs GROUP BY domain ORDER BY domain"
+        )
+        by_domain: dict[str, int] = {}
+        for r in cur.fetchall():
+            by_domain[str(r["domain"])] = int(r["c"])
+        mm = conn.execute(
+            "SELECT MIN(created_at) AS lo, MAX(created_at) AS hi FROM diligence_runs"
+        ).fetchone()
+    finally:
+        conn.close()
+    return {
+        "db_path": resolved,
+        "file_bytes": file_bytes,
+        "row_count": row_count,
+        "by_domain": by_domain,
+        "created_at_min": mm["lo"] if mm else None,
+        "created_at_max": mm["hi"] if mm else None,
+    }
+
+
 def get_run(*, db_path: Path, run_id: str) -> dict[str, Any] | None:
     conn = _connect(db_path)
     try:

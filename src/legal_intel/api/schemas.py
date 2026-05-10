@@ -18,6 +18,12 @@ class QueryRequest(BaseModel):
         default=None,
         description="Optional: scope retrieval to one indexed document id.",
     )
+    limit: int | None = Field(
+        default=None,
+        ge=1,
+        le=128,
+        description="Override configured retrieval_top_k for this request.",
+    )
 
 
 class LocalPathIngestRequest(BaseModel):
@@ -83,7 +89,10 @@ class RetrieveOnlyResponse(BaseModel):
 
     sources: list[dict[str, Any]]
     formatted_context: str
-    retrieval_top_k: int
+    retrieval_top_k: int = Field(
+        ...,
+        description="Effective retrieval depth for this response (config default or request override).",
+    )
 
 
 class EmbeddingSimilarityRequest(BaseModel):
@@ -98,6 +107,21 @@ class EmbeddingSimilarityResponse(BaseModel):
     dimension: int
 
 
+class EmbeddingBatchRequest(BaseModel):
+    """Encode many strings with the active embedding backend (Ollama /api/embed or sentence-transformers)."""
+
+    texts: list[str] = Field(..., min_length=1, max_length=48)
+
+
+class EmbeddingBatchResponse(BaseModel):
+    dimension: int
+    count: int
+    embedding_provider: str
+    ollama_embedding_model: str = ""
+    embedding_model: str = ""
+    vectors: list[list[float]]
+
+
 class OllamaGenerateRequest(BaseModel):
     """Forward to Ollama ``POST /api/generate`` (non-streaming). Uses ``OLLAMA_BASE_URL`` origin."""
 
@@ -109,6 +133,12 @@ class OllamaGenerateRequest(BaseModel):
         default_factory=dict,
         description="Additional JSON fields merged into the Ollama request (temperature, num_ctx, etc.).",
     )
+
+
+class OllamaShowRequest(BaseModel):
+    """Inspect an installed Ollama model via native ``POST /api/show``."""
+
+    model: str = Field(..., min_length=1)
 
 
 class RunSummaryOut(BaseModel):
