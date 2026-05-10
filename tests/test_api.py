@@ -13,6 +13,9 @@ def api_client():
     os.environ["LEGAL_INTEL_MOCK_LLM"] = "1"
     os.environ["QDRANT_URL"] = ":memory:"
     os.environ["DILIGENCE_DOMAIN"] = "mna"
+    os.environ["PERSIST_UPLOADS"] = "0"
+    os.environ["PERSIST_RUNS"] = "0"
+    os.environ["LLM_PROVIDER"] = "openai_compatible"
     from legal_intel.config import get_settings
 
     get_settings.cache_clear()
@@ -101,3 +104,93 @@ def test_ingest_pdf_minimal(api_client):
     out = r.json()
     assert "doc_id" in out
     assert out["chunks"] >= 1
+
+
+def test_agents_manifest(api_client):
+    r = api_client.get("/v1/agents")
+    assert r.status_code == 200
+    data = r.json()
+    assert "model_routing" in data
+    assert "langgraph_pipelines" in data
+
+
+def test_analyze_stream_mna(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="s1",
+        doc_label="c.pdf",
+        chunks=[("Term: 12 months notice for termination.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/analyze/stream",
+        json={"query": "List notice periods.", "domain": "mna"},
+    )
+    assert r.status_code == 200
+    assert "data:" in r.text
+    assert "done" in r.text
+
+
+def test_query_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="sq1",
+        doc_label="x.pdf",
+        chunks=[("Governing law: Delaware.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/query/stream",
+        json={"question": "What is governing law?", "doc_id": "sq1"},
+    )
+    assert r.status_code == 200
+    assert "token" in r.text or "MOCK" in r.text
+
+
+def test_persist_run(tmp_path, monkeypatch):
+    db = tmp_path / "r.db"
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("DILIGENCE_DOMAIN", "mna")
+    monkeypatch.setenv("PERSIST_UPLOADS", "0")
+    monkeypatch.setenv("PERSIST_RUNS", "1")
+    monkeypatch.setenv("RUNS_DB_PATH", str(db))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="p1",
+        doc_label="m.pdf",
+        chunks=[("Payment net 30.", {"page_start": 1, "page_end": 1})],
+    )
+    with TestClient(app) as client:
+        r = client.post(
+            "/v1/analyze",
+            json={"query": "Payment terms?", "domain": "mna"},
+        )
+        assert r.status_code == 200
+        assert r.json().get("run_id")
+        lst = client.get("/v1/runs")
+        assert lst.status_code == 200
+        assert len(lst.json()) >= 1
+    get_settings.cache_clear()
+
+
+def test_runtime(api_client):
+    r = api_client.get("/v1/runtime")
+    assert r.status_code == 200
+    assert "python_version" in r.json()
+
+
+def test_disk(api_client):
+    r = api_client.get("/v1/disk")
+    assert r.status_code == 200
+    assert "free_bytes" in r.json()

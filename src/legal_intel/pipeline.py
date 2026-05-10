@@ -19,11 +19,25 @@ def _doc_id_from_path(path: str) -> str:
     return f"{p.stem}_{h}"
 
 
-def ingest_pdf(path: str, *, doc_label: str | None = None, use_ocr: bool = False) -> tuple[str, int]:
+def doc_id_from_pdf_bytes(content: bytes, doc_label: str) -> str:
+    """Stable document id from file bytes + label stem (used by HTTP ingest before temp paths exist)."""
+    h = hashlib.sha256(content).hexdigest()[:16]
+    stem = Path(doc_label).stem[:96] or "document"
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in stem)
+    return f"{safe}_{h}"
+
+
+def ingest_pdf(
+    path: str,
+    *,
+    doc_label: str | None = None,
+    use_ocr: bool = False,
+    doc_id: str | None = None,
+) -> tuple[str, int]:
     """Load PDF, chunk, embed, and upsert into Qdrant. Returns (doc_id, num_chunks)."""
     s = get_settings()
     label = doc_label or Path(path).name
-    doc_id = _doc_id_from_path(path)
+    resolved_id = doc_id or _doc_id_from_path(path)
 
     if use_ocr and s.ocr_enabled:
         from legal_intel.ocr.engine import ocr_pdf
@@ -67,5 +81,5 @@ def ingest_pdf(path: str, *, doc_label: str | None = None, use_ocr: bool = False
             extra["section_label"] = c.section_label
         tuples.append((c.text, extra))
     n = store.upsert_document_chunks(
-        doc_id=doc_id, doc_label=label, chunks=tuples)
-    return doc_id, n
+        doc_id=resolved_id, doc_label=label, chunks=tuples)
+    return resolved_id, n

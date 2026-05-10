@@ -264,10 +264,23 @@
         <button type="button" id="btnHealth">Check health</button>
         <span id="healthPill" class="pill bad">Unknown</span>
       </div>
+      <pre class="sources" id="healthMeta" style="margin-top:0.75rem;max-height:200px;display:none;"></pre>
       <p class="footer-note" style="margin-top:0.85rem;border:none;padding:0;">
         Example: run <code>legal-api</code> or <code>uvicorn legal_intel.api.main:app --host 0.0.0.0 --port 8080</code>.
-        Set <code>LEGAL_INTEL_CORS_ORIGINS</code> on the server if needed.
+        Default stack uses <strong>local Ollama</strong> (<code>LLM_PROVIDER=ollama</code>). Set <code>LEGAL_INTEL_CORS_ORIGINS</code> on the server if needed.
       </p>
+    </div>
+
+    <div class="card">
+      <h2>Device introspection</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin:0 0 0.65rem;">Uses paths and disk on the machine running the API (not Vercel).</p>
+      <div class="row">
+        <button type="button" id="btnRuntime">Runtime</button>
+        <button type="button" id="btnAgents">Agent manifest</button>
+        <button type="button" id="btnDisk">Disk space</button>
+        <button type="button" id="btnRuns">Recent runs</button>
+      </div>
+      <pre class="sources" id="metaOut" style="margin-top:0.65rem;max-height:220px;display:none;"></pre>
     </div>
 
     <div class="tabs" role="tablist">
@@ -296,9 +309,16 @@
           placeholder="e.g. Analyze title chain, EC risk, and encumbrance signals."></textarea>
         <div class="row" style="margin-top:0.65rem;">
           <button type="button" class="primary" id="btnAnalyze">Run diligence</button>
+          <button type="button" id="btnAnalyzeStream" title="LangGraph SSE">Stream (SSE)</button>
         </div>
         <div class="err" id="analyzeErr"></div>
       </div>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <h2>Stream log (LangGraph steps)</h2>
+      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 0.5rem;">Server-sent events from <code>/v1/analyze/stream</code>. Final event includes merged state + optional <code>run_id</code>.</p>
+      <pre class="report" id="streamLog" style="display:block;max-height:280px;overflow:auto;font-size:0.8rem;"></pre>
     </div>
 
     <div class="card" style="margin-top:1rem;">
@@ -318,6 +338,7 @@
       <input type="text" id="qaDoc" placeholder="Leave blank to search all indexed chunks" />
       <div class="row" style="margin-top:0.65rem;">
         <button type="button" class="primary" id="btnQuery">Ask</button>
+        <button type="button" id="btnQueryStream">Stream answer</button>
       </div>
       <div class="err" id="queryErr"></div>
       <h3 style="font-size:0.85rem;color:var(--muted);margin:1rem 0 0.35rem;">Answer</h3>
@@ -338,6 +359,7 @@
     let activeDomain = "india_re";
     let indexedDocs = [];
     let lastResult = null;
+    let streamLogAcc = "";
 
     const $ = (id) => document.getElementById(id);
 
@@ -397,8 +419,78 @@
       try {
         const h = await fetchJson("/health");
         setHealth(true, h.mock_llm ? "OK · mock LLM" : "OK · live LLM");
+        const hm = $("healthMeta");
+        hm.style.display = "block";
+        hm.textContent = JSON.stringify(h, null, 2);
       } catch (e) {
         setHealth(false, "Offline");
+        alert(e.message || String(e));
+      }
+    };
+
+    async function readSseStream(path, body, onData) {
+      const res = await fetch(apiUrl(path), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || res.statusText);
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        for (const block of parts) {
+          const line = block.trim();
+          if (!line.startsWith("data:")) continue;
+          const json = line.slice(5).trim();
+          try {
+            onData(JSON.parse(json));
+          } catch { /* ignore */ }
+        }
+      }
+    }
+
+    $("btnRuntime").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/runtime");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnAgents").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/agents");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnDisk").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/disk");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnRuns").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/runs");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
         alert(e.message || String(e));
       }
     };
@@ -439,6 +531,39 @@
       ev.target.value = "";
     };
 
+    $("btnAnalyzeStream").onclick = async () => {
+      $("analyzeErr").textContent = "";
+      streamLogAcc = "";
+      $("streamLog").textContent = "";
+      try {
+        const doc_ids = indexedDocs.map((d) => d.doc_id);
+        const doc_labels = {};
+        indexedDocs.forEach((d) => { doc_labels[d.doc_id] = d.doc_label; });
+        const body = {
+          query: $("diligenceQuery").value.trim() || "Summarize obligations and risks.",
+          domain: activeDomain,
+          doc_ids,
+          doc_labels,
+        };
+        if (activeDomain === "india_re" && doc_ids.length === 0) {
+          throw new Error("Upload at least one PDF for India property mode.");
+        }
+        await readSseStream("/v1/analyze/stream", body, (ev) => {
+          streamLogAcc += JSON.stringify(ev) + "\n";
+          $("streamLog").textContent = streamLogAcc;
+          if (ev.event === "done" && ev.result) {
+            lastResult = ev.result;
+            $("reportEmpty").style.display = "none";
+            $("reportOut").style.display = "block";
+            $("reportOut").textContent = ev.result.final_report || JSON.stringify(ev.result, null, 2);
+            $("btnDownloadJson").style.display = "inline-block";
+          }
+        });
+      } catch (e) {
+        $("analyzeErr").textContent = e.message || String(e);
+      }
+    };
+
     $("btnAnalyze").onclick = async () => {
       $("analyzeErr").textContent = "";
       $("reportEmpty").style.display = "block";
@@ -463,6 +588,10 @@
           body: JSON.stringify(body),
         });
         lastResult = out.result;
+        if (out.run_id) {
+          streamLogAcc = "run_id: " + out.run_id + "\n";
+          $("streamLog").textContent = streamLogAcc;
+        }
         const report = out.result?.final_report || "(No final_report in response)";
         $("reportEmpty").style.display = "none";
         $("reportOut").style.display = "block";
@@ -481,6 +610,31 @@
       a.download = "diligence_output.json";
       a.click();
       URL.revokeObjectURL(a.href);
+    };
+
+    $("btnQueryStream").onclick = async () => {
+      $("queryErr").textContent = "";
+      $("qaAnswer").style.display = "block";
+      $("qaAnswer").textContent = "";
+      $("qaSources").style.display = "none";
+      try {
+        const body = {
+          question: $("qaQ").value.trim(),
+          doc_id: $("qaDoc").value.trim() || null,
+        };
+        if (!body.question) throw new Error("Enter a question.");
+        let answer = "";
+        await readSseStream("/v1/query/stream", body, (ev) => {
+          if (ev.event === "sources") {
+            $("qaSources").style.display = "block";
+            $("qaSources").textContent = JSON.stringify(ev.sources, null, 2);
+          }
+          if (ev.event === "token" && ev.text) answer += ev.text;
+          $("qaAnswer").textContent = answer;
+        });
+      } catch (e) {
+        $("queryErr").textContent = e.message || String(e);
+      }
     };
 
     $("btnQuery").onclick = async () => {

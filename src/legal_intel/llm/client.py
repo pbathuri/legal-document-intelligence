@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -130,6 +131,48 @@ def chat_complete(
     if isinstance(content, str):
         return content
     return "".join(str(p) for p in content)
+
+
+def chat_stream(
+    system: str,
+    user: str,
+    *,
+    temperature: float = 0.1,
+    max_tokens: int = 4096,
+    task: LlmTaskKind | None = None,
+) -> Iterator[str]:
+    """Token/chunk stream from vLLM or Ollama (OpenAI-compatible). Mock mode yields a single chunk."""
+    s = get_settings()
+    system = _maybe_redact(system)
+    user = _maybe_redact(user)
+    if s.legal_intel_mock_llm:
+        yield _mock_response(system, user)
+        return
+    model = resolve_model_for_task(task)
+    llm = _make_llm(model=model, temperature=temperature, max_tokens=max_tokens)
+    callbacks = _langfuse_callbacks()
+    cfg = {"callbacks": callbacks} if callbacks else {}
+    messages = [SystemMessage(content=system), HumanMessage(content=user)]
+    for chunk in llm.stream(messages, config=cfg):
+        text = _flatten_chunk_content(chunk.content)
+        if text:
+            yield text
+
+
+def _flatten_chunk_content(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(str(item.get("text", "")))
+            elif isinstance(item, str):
+                parts.append(item)
+        return "".join(parts)
+    return str(content)
 
 
 def chat_complete_json(

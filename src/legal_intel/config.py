@@ -16,12 +16,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
-    # LLM
-    llm_provider: LlmProvider = "openai_compatible"
+    # LLM — default to local Ollama agents (OpenAI-compatible /v1); override for vLLM/cloud
+    llm_provider: LlmProvider = "ollama"
     """Use `ollama` with `ollama_base_url` (OpenAI-compatible prefix, e.g. http://localhost:11434/v1)."""
     openai_api_base: str = "http://localhost:8000/v1"
     openai_api_key: str = "EMPTY"
-    llm_model: str = "meta-llama/Llama-3.1-70B-Instruct"
+    llm_model: str = "llama3.2"
     ollama_base_url: str = "http://localhost:11434/v1"
     llm_model_extraction: str = ""
     llm_model_specialist: str = ""
@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     langfuse_host: str = ""
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
+    # Local HTTP API / device storage
+    persist_uploads: bool = True
+    upload_storage_dir: str = "data/uploads"
+    persist_runs: bool = True
+    runs_db_path: str = "data/local/runs.db"
+    ollama_probe_timeout_seconds: float = 2.0
 
 
 @functools.lru_cache(maxsize=1)

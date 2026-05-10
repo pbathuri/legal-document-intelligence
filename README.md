@@ -64,11 +64,16 @@ legal-api
 # → http://127.0.0.1:8080  (override with LEGAL_INTEL_API_PORT)
 ```
 
-2. Endpoints:
-   - `GET /health` — mock/live LLM flag, Qdrant URL, resolved multimodel names
-   - `POST /v1/ingest` — multipart PDF upload → `{ doc_id, doc_label, chunks }`
-   - `POST /v1/analyze` — JSON `{ query, domain: india_re|mna, doc_ids, doc_labels }` → full diligence state
-   - `POST /v1/query` — JSON `{ question, doc_id? }` — grounded Q&A over indexed chunks
+2. Endpoints (selection):
+   - `GET /health` — mock/live LLM, Qdrant, resolved multimodel names; when `LLM_PROVIDER=ollama`, lists models from local **Ollama** `/api/tags`
+   - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local)
+   - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
+   - `GET /v1/runs` / `GET /v1/runs/{id}` — SQLite-backed diligence history (`PERSIST_RUNS`, `RUNS_DB_PATH`)
+   - `GET /v1/disk` — free space on volume holding upload storage
+   - `POST /v1/ingest` — multipart PDF → `{ doc_id, doc_label, chunks, persisted_path? }` (optional on-disk copy under `UPLOAD_STORAGE_DIR`)
+   - `POST /v1/analyze` — full graph run; returns optional `run_id` when persistence enabled
+   - `POST /v1/analyze/stream` — **SSE** (`text/event-stream`) LangGraph step updates + final merged state
+   - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources)
 
 3. Point the **API base URL** in `index.html` (saved in browser localStorage) at your running server. Set `LEGAL_INTEL_CORS_ORIGINS` on the API if you restrict origins (default allows `*`).
 

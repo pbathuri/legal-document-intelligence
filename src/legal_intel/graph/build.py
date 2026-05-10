@@ -273,3 +273,27 @@ def run_diligence_for_domain(
     if domain == "india_re":
         return run_diligence_india(user_query, doc_ids or [], doc_labels or {})
     return run_diligence(user_query)
+
+
+def stream_diligence_for_domain(
+    user_query: str,
+    *,
+    domain: DiligenceDomain,
+    doc_ids: list[str] | None = None,
+    doc_labels: dict[str, str] | None = None,
+):
+    """
+    Stream LangGraph node completions as mapping updates (sync iterator).
+    Each yielded value is ``{node_name: partial_state_update}``.
+    """
+    if domain == "india_re":
+        graph = build_graph_india()
+        initial: dict = {
+            "user_query": user_query,
+            "doc_ids": doc_ids or [],
+            "doc_labels": doc_labels or {},
+        }
+    else:
+        graph = build_graph()
+        initial = {"user_query": user_query}
+    yield from graph.stream(initial, stream_mode="updates")
