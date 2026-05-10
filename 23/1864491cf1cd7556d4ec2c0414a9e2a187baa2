@@ -1,0 +1,40 @@
+README.md
+  s_c7571ff3b984be::t_92218ec385a377 88
+  s_c7571ff3b984be::t_a76a8dd80c1cb4 127
+  s_c7571ff3b984be::t_c24dd350631a6e 116-117
+tests/test_api.py
+  s_c7571ff3b984be::t_b31a970bc31849 1594-1671
+src/legal_intel/llm/client.py
+  s_c7571ff3b984be::t_4f407d5a00d97e 240-254
+src/legal_intel/prompts.py
+  s_c7571ff3b984be::t_5ee3e0cf9dd653 111-127
+src/legal_intel/runtime/embedding_similarity.py
+  s_c7571ff3b984be::t_0fe43b922c4361 21-47
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_80b55db6e68b55 66-69
+  s_c7571ff3b984be::t_566e4ec0ebb756 832-865
+  s_c7571ff3b984be::t_1e2872c0b5447c 123
+  s_c7571ff3b984be::t_58abd09f87b6a8 1815-1869
+  s_c7571ff3b984be::t_56a92a526706db 441
+  s_c7571ff3b984be::t_0b1c732873d112 1983-2040
+  s_c7571ff3b984be::t_f1ce23426fc435 350-359
+  s_c7571ff3b984be::t_59b6890a4ee7d2 107
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_c9843993088a2f 497-532
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "231864491cf1cd7556d4ec2c0414a9e2a187baa2",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
