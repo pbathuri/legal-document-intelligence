@@ -84,6 +84,35 @@ class QueryResponse(BaseModel):
     sources: list[dict[str, Any]]
 
 
+class QueryHydeRequest(BaseModel):
+    """HyDE-style RAG: synthesize a hypothetical excerpt, then retrieve using question + excerpt (local Ollama / routed LLM)."""
+
+    question: str = Field(..., min_length=1)
+    doc_id: str | None = Field(
+        default=None,
+        description="Optional: scope retrieval to one indexed document id.",
+    )
+    limit: int | None = Field(
+        default=None,
+        ge=1,
+        le=128,
+        description="Override configured retrieval_top_k for retrieval.",
+    )
+    hyde_temperature: float = Field(
+        default=0.12,
+        ge=0.0,
+        le=1.5,
+        description="Sampling temperature for the hypothetical-document step only.",
+    )
+
+
+class QueryHydeResponse(BaseModel):
+    answer: str
+    sources: list[dict[str, Any]]
+    hypothetical_document: str
+    retrieval_top_k: int
+
+
 class RetrieveOnlyResponse(BaseModel):
     """RAG retrieval + formatted context block without calling an LLM."""
 
@@ -444,5 +473,24 @@ class TimelineExtractRequest(BaseModel):
 class TimelineExtractResponse(BaseModel):
     doc_id: str
     timeline: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class RiskScanRequest(BaseModel):
+    """Single-doc retrieval + JSON risk register (severity, evidence_refs ↔ [n])."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="indemnity liability cap warranty representations termination change of control confidentiality carve-out",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class RiskScanResponse(BaseModel):
+    doc_id: str
+    risk_register: dict[str, Any]
     sources: list[dict[str, Any]]
     retrieval_top_k: int

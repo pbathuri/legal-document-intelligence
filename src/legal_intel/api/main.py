@@ -47,6 +47,8 @@ from legal_intel.api.schemas import (
     QueryBatchRequest,
     QueryBatchResponse,
     QueryCitationsResponse,
+    QueryHydeRequest,
+    QueryHydeResponse,
     QueryRequest,
     QueryResponse,
     RetrieveBatchItem,
@@ -59,6 +61,8 @@ from legal_intel.api.schemas import (
     StructuredExtractResponse,
     TimelineExtractRequest,
     TimelineExtractResponse,
+    RiskScanRequest,
+    RiskScanResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -94,6 +98,8 @@ from legal_intel.prompts import (
     COMPARE_DOCUMENTS_SYSTEM,
     CROSS_DOCUMENT_SUMMARIZE_SYSTEM,
     QUERY_SYSTEM,
+    HYDE_HYPOTHETICAL_DOC_SYSTEM,
+    RISK_SCAN_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -113,6 +119,8 @@ from legal_intel.runtime.embedding_similarity import (
     similarity_for_text_pair,
 )
 from legal_intel.runtime.host_metrics import gather_extended_host_metrics
+from legal_intel.runtime.local_allowlist_inventory import gather_local_allowlist_inventory
+from legal_intel.runtime.network_snapshot import gather_network_snapshot
 from legal_intel.runtime.ollama_embed_raw_proxy import ollama_native_embed_raw
 from legal_intel.runtime.process_info import gather_api_process_snapshot
 from legal_intel.runtime.ollama_chat_proxy import ollama_native_chat
@@ -296,18 +304,41 @@ def _prepare_structured_extract_parts(
     return did, user, _rag_sources_from_hits(hits), lim
 
 
-def _prepare_timeline_extract_parts(
-    body: TimelineExtractRequest,
+def _single_doc_retrieval_context(
+    *,
+    doc_id: str,
+    retrieval_query: str,
+    limit: int | None,
 ) -> tuple[str, str, list[dict[str, Any]], int]:
     store = LegalVectorStore()
     s = get_settings()
-    lim = body.limit if body.limit is not None else s.retrieval_top_k
-    did = body.doc_id.strip()
-    rq = body.retrieval_query.strip()
+    lim = limit if limit is not None else s.retrieval_top_k
+    did = doc_id.strip()
+    rq = retrieval_query.strip()
     hits = store.search(rq, limit=lim, doc_id=did)
     ctx = format_context_block(hits)
     user = f"CONTEXT EXCERPTS:\n{ctx}"
     return did, user, _rag_sources_from_hits(hits), lim
+
+
+def _prepare_timeline_extract_parts(
+    body: TimelineExtractRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_risk_scan_parts(
+    body: RiskScanRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
 
 
 def _parse_citations_llm_json(
@@ -391,7 +422,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.17.0",
+    version="0.18.0",
 )
 
 _origins = _cors_origins()
@@ -1141,6 +1172,19 @@ def runtime_host_metrics_extended() -> dict[str, Any]:
     return gather_extended_host_metrics()
 
 
+@app.get("/v1/runtime/network")
+def runtime_network_snapshot() -> dict[str, Any]:
+    """Host interfaces (IPv4/IPv6), hostname, and aggregate I/O counters when **psutil** is installed."""
+    return gather_network_snapshot()
+
+
+@app.get("/v1/runtime/local-path-allowlist")
+def runtime_local_path_allowlist() -> dict[str, Any]:
+    """Resolved ``LEGAL_INTEL_ALLOW_LOCAL_PATHS`` prefixes + existence + disk space for ingest/embed-from-disk."""
+    s = get_settings()
+    return gather_local_allowlist_inventory(raw_allow=s.legal_intel_allow_local_paths)
+
+
 @app.get("/v1/settings/effective")
 def effective_settings() -> dict[str, Any]:
     """Resolved configuration with secrets redacted (safe for screenshots)."""
@@ -1663,6 +1707,61 @@ def rag_timeline_extract(body: TimelineExtractRequest) -> TimelineExtractRespons
     )
 
 
+@app.post("/v1/rag/timeline-extract/stream")
+def rag_timeline_extract_stream(body: TimelineExtractRequest):
+    """SSE: sources event + streaming JSON text from the timeline specialist (parse client-side)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_timeline_extract_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                TIMELINE_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/risk-scan", response_model=RiskScanResponse)
+def rag_risk_scan(body: RiskScanRequest) -> RiskScanResponse:
+    """Single-document retrieval + JSON risk register (``risk_scan_v1`` / extraction-task routing)."""
+    did, user, sources, lim = _prepare_risk_scan_parts(body)
+    raw = chat_complete_json(
+        RISK_SCAN_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        risk_register: dict[str, Any] = json.loads(raw)
+        if not isinstance(risk_register, dict):
+            risk_register = {"_value": risk_register}
+    except Exception:
+        risk_register = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return RiskScanResponse(
+        doc_id=did,
+        risk_register=risk_register,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
 def analyze(body: AnalyzeRequest) -> AnalyzeResponse:
     if body.domain == "india_re" and not body.doc_ids:
@@ -1737,6 +1836,43 @@ def rag_query(body: QueryRequest) -> QueryResponse:
     user = f"QUESTION:\n{body.question}\n\nCONTEXT EXCERPTS:\n{ctx}"
     answer = chat_complete(QUERY_SYSTEM, user, temperature=0.05, task="specialist")
     return QueryResponse(answer=answer, sources=_rag_sources_from_hits(hits))
+
+
+@app.post("/v1/query/hyde", response_model=QueryHydeResponse)
+def rag_query_hyde(body: QueryHydeRequest) -> QueryHydeResponse:
+    """
+    HyDE-style retrieval: generate a hypothetical excerpt (specialist task), embed-search with question + excerpt,
+    then grounded answer (same stack as ``/v1/query`` — Ollama when configured).
+    """
+    qr = QueryRequest(
+        question=body.question.strip(),
+        doc_id=body.doc_id,
+        limit=body.limit,
+    )
+    lim = _effective_retrieval_limit(qr)
+    hypo_user = (
+        f"QUESTION:\n{body.question.strip()}\n\n"
+        "Write ONLY the hypothetical passage — no title lines or commentary."
+    )
+    hyp = chat_complete(
+        HYDE_HYPOTHETICAL_DOC_SYSTEM,
+        hypo_user,
+        temperature=float(body.hyde_temperature),
+        task="specialist",
+    )
+    hyp_stripped = (hyp or "").strip()
+    retrieve_query = f"{body.question.strip()}\n\n{hyp_stripped}"[:14_000]
+    store = LegalVectorStore()
+    hits = store.search(retrieve_query, limit=lim, doc_id=body.doc_id)
+    ctx = format_context_block(hits)
+    user = f"QUESTION:\n{body.question.strip()}\n\nCONTEXT EXCERPTS:\n{ctx}"
+    answer = chat_complete(QUERY_SYSTEM, user, temperature=0.05, task="specialist")
+    return QueryHydeResponse(
+        answer=answer,
+        sources=_rag_sources_from_hits(hits),
+        hypothetical_document=hyp_stripped,
+        retrieval_top_k=lim,
+    )
 
 
 @app.post("/v1/query/citations", response_model=QueryCitationsResponse)

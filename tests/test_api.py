@@ -1502,3 +1502,92 @@ def test_ollama_generate_batch_proxied(monkeypatch):
             assert out["items"][0]["ok"] is True
             assert out["items"][1]["ok"] is True
     get_settings.cache_clear()
+
+
+def test_query_hyde(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="hyde1",
+        doc_label="e.pdf",
+        chunks=[("The indemnity cap is five million USD for fundamental breaches.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/query/hyde",
+        json={"question": "What is the indemnity cap?", "doc_id": "hyde1", "limit": 4},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "hypothetical_document" in body
+    assert body["answer"]
+    assert len(body["sources"]) >= 1
+
+
+def test_risk_scan(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="rs1",
+        doc_label="f.pdf",
+        chunks=[("Seller makes no warranty as to tax liabilities after closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/risk-scan",
+        json={"doc_id": "rs1", "retrieval_query": "warranty tax"},
+    )
+    assert r.status_code == 200
+    b = r.json()
+    assert b["doc_id"] == "rs1"
+    assert b["risk_register"]
+    assert len(b["sources"]) >= 1
+
+
+def test_timeline_extract_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="tls1",
+        doc_label="g.pdf",
+        chunks=[("Board approval required before week 2 of January 2026.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/timeline-extract/stream",
+        json={"doc_id": "tls1", "retrieval_query": "January board"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text
+    assert "done" in r.text
+
+
+def test_runtime_network(api_client):
+    r = api_client.get("/v1/runtime/network")
+    assert r.status_code == 200
+    j = r.json()
+    assert "hostname" in j
+    assert "psutil_available" in j
+
+
+def test_runtime_local_path_allowlist(tmp_path, monkeypatch):
+    allow = tmp_path / "zallowed"
+    allow.mkdir()
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LEGAL_INTEL_ALLOW_LOCAL_PATHS", str(allow))
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        r = client.get("/v1/runtime/local-path-allowlist")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["prefix_count"] >= 1
+        assert data["items"][0]["exists"] is True
+    get_settings.cache_clear()

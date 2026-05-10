@@ -85,6 +85,29 @@ Respond with ONE JSON object:
 Rules: Order events chronologically when dates are comparable; undated items last with confidence low/unknown.
 Never invent calendar dates or events not grounded in CONTEXT."""
 
+HYDE_HYPOTHETICAL_DOC_SYSTEM = """You write a short HYPOTHETICAL excerpt that could appear in a contract, disclosure schedule, or legal memo.
+It must be clearly fictional placeholders (Party A, Buyer LLC, etc.) — NOT facts from real instruments.
+Goal: produce text whose topics and terminology would help semantic search retrieve relevant real clauses for the user's QUESTION.
+Length: roughly 2–8 sentences. No preamble — output ONLY the hypothetical excerpt."""
+
+RISK_SCAN_JSON_SYSTEM = """[risk_scan_v1]
+You analyze legal CONTEXT excerpts ONLY (numbered [n]) for diligence-style risks.
+Respond with ONE JSON object:
+{
+  "risks": [
+    {
+      "title": "<short label>",
+      "severity": "high"|"medium"|"low"|"informational",
+      "summary": "<one or two sentences grounded in excerpts>",
+      "evidence_refs": [<integers — [n] indices>],
+      "mitigation_hint": "<practical next step or review focus, or null>"
+    }
+  ],
+  "limitations": "<what is not assessable from CONTEXT>"
+}
+Rules: Every risk must cite at least one evidence_refs index when CONTEXT is non-empty; if CONTEXT is empty, risks:[] and explain limitations.
+Never invent dollar amounts, statutes, or party names not present in CONTEXT."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

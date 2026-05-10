@@ -221,6 +221,22 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "risk_scan_v1" in system:
+            return json.dumps(
+                {
+                    "risks": [
+                        {
+                            "title": "[MOCK] Illustrative risk",
+                            "severity": "medium",
+                            "summary": "[MOCK] Grounded-style summary placeholder.",
+                            "evidence_refs": [1],
+                            "mitigation_hint": "Human counsel review.",
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real risk scan.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

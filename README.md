@@ -89,6 +89,8 @@ legal-api
    - `GET /v1/runtime/storage` — bounded filesystem inventory: bytes + file counts under **`UPLOAD_STORAGE_DIR`**, **`manifest.jsonl`** size/line estimate, **`RUNS_DB_PATH`** file size (device-local maintenance)
    - `GET /v1/runtime/git` — best-effort **Git** snapshot for the API **`cwd`** (`commit`, `branch`, `dirty` when **`git`** is on **PATH**)
    - `GET /v1/runtime/host-metrics` — extended **psutil** snapshot: CPU sample, RAM/swap %, disk usage of **`cwd`**, boot time, bounded disk partition list (optional dependency)
+   - `GET /v1/runtime/network` — hostname/FQDN + per-interface IPv4/IPv6 addresses (**psutil**); aggregate **`net_io_counters`** when available
+   - `GET /v1/runtime/local-path-allowlist` — inspect **`LEGAL_INTEL_ALLOW_LOCAL_PATHS`** prefixes (exists, resolved path, **`disk_usage`** free/total per prefix root)
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
@@ -108,6 +110,8 @@ legal-api
    - `POST /v1/rag/cross-document-summary/stream` — **SSE**: **`sources_by_doc_id`** event + synthesis token stream + **`done`**
    - `POST /v1/rag/structured-extract` — retrieval + **`json_object`** extraction for caller-defined **`categories`** keys + **`evidence_refs`** (**`STRUCTURED_EXTRACT_SYSTEM`**; extraction-task routing)
    - `POST /v1/rag/timeline-extract` — retrieval + JSON **timeline** (`events` with **`date_text`**, **`evidence_refs`** ↔ **`[n]`**; **`TIMELINE_JSON_SYSTEM`** / **`timeline_extract_v1`**)
+   - `POST /v1/rag/timeline-extract/stream` — **SSE**: **`sources`** event + token stream of JSON timeline text (**extraction** routing)
+   - `POST /v1/rag/risk-scan` — retrieval + JSON **risk register** (`risks[]` with **`severity`**, **`evidence_refs`**; **`RISK_SCAN_JSON_SYSTEM`** / **`risk_scan_v1`**)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
@@ -116,6 +120,7 @@ legal-api
    - `POST /v1/analyze` — full graph run; returns optional `run_id` when persistence enabled
    - `POST /v1/analyze/stream` — **SSE** (`text/event-stream`) LangGraph step updates + final merged state
    - `POST /v1/query` / `POST /v1/query/stream` — grounded Q&A (stream returns tokens + sources); optional JSON **`limit`** (1–128) overrides **`RETRIEVAL_TOP_K`** for that call
+   - `POST /v1/query/hyde` — **HyDE**-style RAG: hypothetical excerpt (**specialist** routing) + retrieval using **question + excerpt** concatenated query → grounded answer (same **`QUERY_SYSTEM`** stack as **`/v1/query`**; **`hyde_temperature`** controls the fiction step)
    - `POST /v1/query/citations` — same retrieval as **`/v1/query`**, but the LLM returns **JSON** with **`direct_answer`**, **`citations`** (`ref_index` ↔ chunk **`[n]`**), **`limitations`** (`json_object` / Ollama-compatible); exposes **`structured`** + flattened **`answer_markdown`**
    - `POST /v1/query/batch` — multiple grounded questions in one request (shared **`doc_id`** / **`limit`**; sequential specialist calls — fewer round trips for agent pipelines)
    - `POST /v1/query/retrieve-only/batch` — batch **`retrieve-only`** (no LLM; contexts + sources per question)
