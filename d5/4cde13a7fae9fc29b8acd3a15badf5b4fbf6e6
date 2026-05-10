@@ -1,0 +1,47 @@
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_8b6024148e778d 932-1008
+tests/test_api.py
+  s_c7571ff3b984be::t_485974de0c9179 2263-2349
+src/legal_intel/prompts.py
+  s_c7571ff3b984be::t_ce37f440acfd86 387-436
+src/legal_intel/llm/client.py
+  s_c7571ff3b984be::t_7450d9c3beacb0 479-525
+src/legal_intel/runtime/import_probe.py
+  s_c7571ff3b984be::t_808da479393665 1-40
+README.md
+  s_c7571ff3b984be::t_c707c909977327 104
+  s_c7571ff3b984be::t_fd8e72911e6661 162-167
+  s_c7571ff3b984be::t_7ad235f49da3ff 93
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_49cb2d605de169 724
+  s_c7571ff3b984be::t_b0e675befb281e 173-175
+  s_c7571ff3b984be::t_1dbfe913511adb 221-222
+  s_c7571ff3b984be::t_24f2aa81a9d66d 111-118
+  s_c7571ff3b984be::t_ab2d42b082dce1 1287-1321
+  s_c7571ff3b984be::t_9b1f921f41dfae 3285-3447
+  s_c7571ff3b984be::t_8d930e8562f869 613-642
+  s_c7571ff3b984be::t_b0b9f42355dcc4 1737-1742
+src/legal_intel/runtime/lexical_overlap.py
+  s_c7571ff3b984be::t_56ebc484da668c 1-5,7-56,58-65
+  s_c7571ff3b984be::t_a75ed4a6882734 6,57
+src/legal_intel/runtime/agent_bootstrap.py
+  s_c7571ff3b984be::t_1c8192f8ca74e2 25-27
+  s_c7571ff3b984be::t_7583cbee55d2dc 40
+  s_c7571ff3b984be::t_d2d8c9d26864d5 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "d54cde13a7fae9fc29b8acd3a15badf5b4fbf6e6",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
