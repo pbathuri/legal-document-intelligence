@@ -1,0 +1,56 @@
+tests/test_api.py
+  s_c7571ff3b984be::t_f485bd3bfcd067 595-603,639-696
+  s_c7571ff3b984be::t_9b347a129395aa 604-638
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_a42097c677becb 92-95
+  s_c7571ff3b984be::t_7b838c64ad60c3 138-143
+  s_c7571ff3b984be::t_7b7f97038261ef 21-26
+  s_c7571ff3b984be::t_72e378a0336108 110-124
+src/legal_intel/persistence/runs.py
+  s_c7571ff3b984be::t_0ad4f1bb1b77a7 226-265
+README.md
+  s_c7571ff3b984be::t_015ef3c4f0fbf6 82
+  s_c7571ff3b984be::t_c7062787f50424 97-98,100
+  s_c7571ff3b984be::t_746f342b77ff02 78
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_f3f469fdd99169 582-588
+  s_c7571ff3b984be::t_f9cbcaee477658 924-925
+  s_c7571ff3b984be::t_0f5719b662fbe5 117-123
+  s_c7571ff3b984be::t_5e84fb559e7724 951-952
+  s_c7571ff3b984be::t_6820c75cee933a 488-503
+  s_c7571ff3b984be::t_615e5c124328de 375-405
+  s_c7571ff3b984be::t_fab493f3074f66 63
+  s_c7571ff3b984be::t_316e11593848ab 936-937,942
+  s_c7571ff3b984be::t_023cd701af848c 24-25,32
+  s_c7571ff3b984be::t_3d9d87d6531319 45
+  s_c7571ff3b984be::t_f1add00586fb74 204
+src/legal_intel/runtime/ollama_show_proxy.py
+  s_c7571ff3b984be::t_8a1390aedae394 1-27
+index.html
+  s_c7571ff3b984be::t_5ea839ebbd7a63 304-309
+  s_c7571ff3b984be::t_844903889b16e5 366-368
+  s_c7571ff3b984be::t_4944f29be5762e 610-618
+  s_c7571ff3b984be::t_800a4d7c4fab97 395-404
+  s_c7571ff3b984be::t_a1e52488d27eea 1015
+  s_c7571ff3b984be::t_b23b946fd5669b 1036
+  s_c7571ff3b984be::t_2dc4f2c55b08d3 801-844
+  s_c7571ff3b984be::t_5eabcabf09a354 286
+  s_c7571ff3b984be::t_ef8547d581c2c1 462-479
+  s_c7571ff3b984be::t_da84ea8d7095cb 1055
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "80cd557ae7748f4e88d5ad565c0328627ec945dc",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
