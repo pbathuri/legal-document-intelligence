@@ -1411,3 +1411,94 @@ def test_structured_extract(api_client):
     assert body["doc_id"] == "se1"
     assert body["extraction"]
     assert len(body["sources"]) >= 1
+
+
+def test_timeline_extract(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="tl1",
+        doc_label="d.pdf",
+        chunks=[("Effective date March 1, 2026; termination notice 90 days.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/timeline-extract",
+        json={"doc_id": "tl1", "retrieval_query": "date termination"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doc_id"] == "tl1"
+    assert body["timeline"]
+    assert len(body["sources"]) >= 1
+
+
+def test_maintenance_stats_sqlite(api_client):
+    r = api_client.get("/v1/maintenance/stats-sqlite")
+    assert r.status_code == 200
+    body = r.json()
+    assert "path" in body
+    assert "exists" in body
+
+
+def test_runtime_host_metrics(api_client):
+    r = api_client.get("/v1/runtime/host-metrics")
+    assert r.status_code == 200
+    assert "cpu_interval_seconds" in r.json()
+
+
+def test_embeddings_pairwise_matrix(api_client):
+    r = api_client.post(
+        "/v1/embeddings/pairwise-matrix",
+        json={
+            "texts": [
+                "first indemnity clause alpha.",
+                "second indemnity clause beta.",
+                "unrelated cookie recipe.",
+            ]
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 3
+    assert len(data["matrix"]) == 3
+    assert len(data["matrix"][0]) == 3
+    assert data["matrix"][0][0] >= 0.99
+    assert data["embedding_provider"] == "sentence_transformers"
+
+
+def test_ollama_generate_batch_proxied(monkeypatch):
+    monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
+    monkeypatch.setenv("QDRANT_URL", ":memory:")
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    from unittest.mock import patch
+
+    from legal_intel.config import get_settings
+
+    get_settings.cache_clear()
+    from legal_intel.api.main import app
+    from fastapi.testclient import TestClient
+
+    calls: list[int] = []
+
+    def fake_gen(origin: str, payload: dict, *, timeout_seconds: float) -> dict:
+        calls.append(1)
+        return {"response": payload.get("prompt", "")[:20], "model": payload.get("model")}
+
+    with patch(
+        "legal_intel.api.main.ollama_native_generate",
+        side_effect=fake_gen,
+    ):
+        with TestClient(app) as client:
+            r = client.post(
+                "/v1/ollama/generate/batch",
+                json={"model": "m", "prompts": ["one", "two"]},
+            )
+            assert r.status_code == 200
+            out = r.json()
+            assert out["count"] == 2
+            assert len(calls) == 2
+            assert out["items"][0]["ok"] is True
+            assert out["items"][1]["ok"] is True
+    get_settings.cache_clear()

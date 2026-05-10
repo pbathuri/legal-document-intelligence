@@ -386,3 +386,63 @@ class StructuredExtractResponse(BaseModel):
     extraction: dict[str, Any]
     sources: list[dict[str, Any]]
     retrieval_top_k: int
+
+
+class OllamaGenerateBatchRequest(BaseModel):
+    """Sequential native ``POST /api/generate`` calls — same model, many prompts (agent batching)."""
+
+    model: str = Field(..., min_length=1)
+    prompts: list[str] = Field(..., min_length=1, max_length=12)
+    system: str | None = None
+    options: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Merged into each Ollama generate payload.",
+    )
+
+
+class OllamaGenerateBatchItem(BaseModel):
+    index: int
+    ok: bool
+    detail: dict[str, Any] | None = None
+    error: str | None = None
+
+
+class OllamaGenerateBatchResponse(BaseModel):
+    model: str
+    count: int
+    items: list[OllamaGenerateBatchItem]
+
+
+class EmbeddingPairwiseMatrixRequest(BaseModel):
+    """Full cosine similarity matrix over 2–24 texts (same embedding backend as RAG)."""
+
+    texts: list[str] = Field(..., min_length=2, max_length=24)
+
+
+class EmbeddingPairwiseMatrixResponse(BaseModel):
+    count: int
+    dimension: int
+    matrix: list[list[float]]
+    text_previews: list[str]
+    embedding_provider: str
+    ollama_embedding_model: str = ""
+    embedding_model: str = ""
+
+
+class TimelineExtractRequest(BaseModel):
+    """Retrieval scoped to one ``doc_id`` + JSON timeline (dates/events + evidence refs)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="dates closing effective termination renewal milestone payment schedule notice",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class TimelineExtractResponse(BaseModel):
+    doc_id: str
+    timeline: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int

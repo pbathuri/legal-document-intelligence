@@ -57,6 +57,13 @@ from legal_intel.api.schemas import (
     SqliteCheckpointRequest,
     StructuredExtractRequest,
     StructuredExtractResponse,
+    TimelineExtractRequest,
+    TimelineExtractResponse,
+    EmbeddingPairwiseMatrixRequest,
+    EmbeddingPairwiseMatrixResponse,
+    OllamaGenerateBatchRequest,
+    OllamaGenerateBatchItem,
+    OllamaGenerateBatchResponse,
 )
 from legal_intel.config import get_settings
 from legal_intel.graph.build import run_diligence_for_domain, stream_diligence_for_domain
@@ -79,6 +86,7 @@ from legal_intel.persistence.runs import (
     sqlite_integrity_check,
     vacuum_sqlite_file,
     wal_checkpoint_sqlite,
+    sqlite_database_stats,
 )
 from legal_intel.pipeline import doc_id_from_pdf_bytes, ingest_pdf_with_stats
 from legal_intel.prompts import (
@@ -87,6 +95,7 @@ from legal_intel.prompts import (
     CROSS_DOCUMENT_SUMMARIZE_SYSTEM,
     QUERY_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
+    TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
     format_context_block,
     format_multi_document_context_block,
@@ -99,7 +108,11 @@ from legal_intel.runtime.build_info import gather_build_info
 from legal_intel.runtime.device_profile import gather_device_profile
 from legal_intel.runtime.git_snapshot import gather_git_snapshot
 from legal_intel.runtime.chunk_near_duplicate import near_duplicate_chunk_pairs
-from legal_intel.runtime.embedding_similarity import similarity_for_text_pair
+from legal_intel.runtime.embedding_similarity import (
+    pairwise_cosine_matrix_for_texts,
+    similarity_for_text_pair,
+)
+from legal_intel.runtime.host_metrics import gather_extended_host_metrics
 from legal_intel.runtime.ollama_embed_raw_proxy import ollama_native_embed_raw
 from legal_intel.runtime.process_info import gather_api_process_snapshot
 from legal_intel.runtime.ollama_chat_proxy import ollama_native_chat
@@ -283,6 +296,20 @@ def _prepare_structured_extract_parts(
     return did, user, _rag_sources_from_hits(hits), lim
 
 
+def _prepare_timeline_extract_parts(
+    body: TimelineExtractRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    store = LegalVectorStore()
+    s = get_settings()
+    lim = body.limit if body.limit is not None else s.retrieval_top_k
+    did = body.doc_id.strip()
+    rq = body.retrieval_query.strip()
+    hits = store.search(rq, limit=lim, doc_id=did)
+    ctx = format_context_block(hits)
+    user = f"CONTEXT EXCERPTS:\n{ctx}"
+    return did, user, _rag_sources_from_hits(hits), lim
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -364,7 +391,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.16.0",
+    version="0.17.0",
 )
 
 _origins = _cors_origins()
@@ -722,6 +749,39 @@ def embedding_cosine_similarity(body: EmbeddingSimilarityRequest) -> EmbeddingSi
     )
 
 
+@app.post("/v1/embeddings/pairwise-matrix", response_model=EmbeddingPairwiseMatrixResponse)
+def embedding_pairwise_matrix(body: EmbeddingPairwiseMatrixRequest) -> EmbeddingPairwiseMatrixResponse:
+    """Full N×N cosine matrix for short texts (clustering / duplicate bundles / agent QC)."""
+    max_chars = 64_000
+    cleaned: list[str] = []
+    for i, t in enumerate(body.texts):
+        ts = (t or "").strip()
+        if not ts:
+            raise HTTPException(status_code=400, detail=f"texts[{i}] is empty")
+        if len(ts) > max_chars:
+            raise HTTPException(
+                status_code=400,
+                detail=f"texts[{i}] exceeds {max_chars} characters",
+            )
+        cleaned.append(ts)
+    s = get_settings()
+    try:
+        out = pairwise_cosine_matrix_for_texts(cleaned)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return EmbeddingPairwiseMatrixResponse(
+        count=int(out["count"]),
+        dimension=int(out["dimension"]),
+        matrix=out["matrix"],
+        text_previews=list(out["text_previews"]),
+        embedding_provider=s.embedding_provider,
+        ollama_embedding_model=s.ollama_embedding_model,
+        embedding_model=s.embedding_model,
+    )
+
+
 @app.get("/v1/build")
 def build_metadata() -> dict[str, Any]:
     """Package / Python / optional git SHA (set ``LEGAL_INTEL_GIT_SHA`` in deploy)."""
@@ -835,6 +895,48 @@ def ollama_generate_native(body: OllamaGenerateRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@app.post("/v1/ollama/generate/batch", response_model=OllamaGenerateBatchResponse)
+def ollama_generate_native_batch(body: OllamaGenerateBatchRequest) -> OllamaGenerateBatchResponse:
+    """
+    Sequential native ``POST /api/generate`` for multiple prompts (same model/options).
+    Each item succeeds or fails independently (timeouts/errors captured per index).
+    """
+    s = get_settings()
+    timeout = max(120.0, s.ollama_probe_timeout_seconds * 60)
+    items: list[OllamaGenerateBatchItem] = []
+    model = body.model.strip()
+    max_chars = 256_000
+    for i, raw in enumerate(body.prompts):
+        prompt = (raw or "").strip()
+        if not prompt:
+            raise HTTPException(status_code=400, detail=f"prompts[{i}] is empty")
+        if len(prompt) > max_chars:
+            raise HTTPException(
+                status_code=400,
+                detail=f"prompts[{i}] exceeds {max_chars} characters",
+            )
+        payload: dict[str, Any] = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+        }
+        if body.system:
+            payload["system"] = body.system
+        payload.update(body.options)
+        try:
+            detail = ollama_native_generate(
+                s.ollama_base_url,
+                payload,
+                timeout_seconds=timeout,
+            )
+            items.append(OllamaGenerateBatchItem(index=i, ok=True, detail=detail))
+        except ValueError as e:
+            items.append(OllamaGenerateBatchItem(index=i, ok=False, error=str(e)))
+        except Exception as e:
+            items.append(OllamaGenerateBatchItem(index=i, ok=False, error=str(e)))
+    return OllamaGenerateBatchResponse(model=model, count=len(items), items=items)
 
 
 @app.post("/v1/ollama/chat")
@@ -994,6 +1096,13 @@ def maintenance_vacuum_runs_db() -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.get("/v1/maintenance/stats-sqlite")
+def maintenance_sqlite_database_stats() -> dict[str, Any]:
+    """SQLite pragma geometry + journal metadata for ``RUNS_DB_PATH`` (no writes; file may be absent)."""
+    s = get_settings()
+    return sqlite_database_stats(Path(s.runs_db_path))
+
+
 @app.get("/v1/runtime", response_model=RuntimeOut)
 def runtime_info() -> RuntimeOut:
     s = get_settings()
@@ -1024,6 +1133,12 @@ def runtime_storage_detail() -> dict[str, Any]:
 def runtime_git_snapshot() -> dict[str, Any]:
     """Best-effort Git metadata for the API process working tree (``git`` on PATH, bounded timeout)."""
     return gather_git_snapshot(cwd=os.getcwd())
+
+
+@app.get("/v1/runtime/host-metrics")
+def runtime_host_metrics_extended() -> dict[str, Any]:
+    """CPU sample, memory/disk utilization, boot time, disk partitions (**psutil** when installed)."""
+    return gather_extended_host_metrics()
 
 
 @app.get("/v1/settings/effective")
@@ -1518,6 +1633,31 @@ def rag_structured_extract(body: StructuredExtractRequest) -> StructuredExtractR
     return StructuredExtractResponse(
         doc_id=did,
         extraction=extraction,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/timeline-extract", response_model=TimelineExtractResponse)
+def rag_timeline_extract(body: TimelineExtractRequest) -> TimelineExtractResponse:
+    """Retrieval + JSON timeline (dates/events + ``evidence_refs`` ↔ chunk indices)."""
+    did, user, sources, lim = _prepare_timeline_extract_parts(body)
+    raw = chat_complete_json(
+        TIMELINE_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        timeline: dict[str, Any] = json.loads(raw)
+        if not isinstance(timeline, dict):
+            timeline = {"_value": timeline}
+    except Exception:
+        timeline = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return TimelineExtractResponse(
+        doc_id=did,
+        timeline=timeline,
         sources=sources,
         retrieval_top_k=lim,
     )

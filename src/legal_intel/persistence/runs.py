@@ -165,6 +165,46 @@ def optimize_sqlite_file(db_path: Path) -> dict[str, Any]:
     return {"path": str(db_path.resolve()), "pragma_optimize": True}
 
 
+def sqlite_database_stats(db_path: Path) -> dict[str, Any]:
+    """Low-level SQLite pragmas for the runs DB (page geometry, journal mode, schema versions)."""
+    db_path = Path(db_path)
+    resolved = str(db_path.resolve())
+    if not db_path.is_file():
+        return {"path": resolved, "exists": False}
+    size_bytes = db_path.stat().st_size
+    conn = sqlite3.connect(str(db_path))
+    try:
+
+        def pragma_scalar(name: str) -> Any:
+            cur = conn.execute(f"PRAGMA {name}")
+            row = cur.fetchone()
+            return row[0] if row else None
+
+        page_count = int(pragma_scalar("page_count") or 0)
+        page_size = int(pragma_scalar("page_size") or 0)
+        freelist = int(pragma_scalar("freelist_count") or 0)
+        journal_mode = str(pragma_scalar("journal_mode") or "")
+        schema_version = pragma_scalar("schema_version")
+        user_version = pragma_scalar("user_version")
+        encoding = str(pragma_scalar("encoding") or "")
+        approx_bytes_from_pages = page_count * page_size if page_count and page_size else None
+        return {
+            "path": resolved,
+            "exists": True,
+            "file_bytes": size_bytes,
+            "page_count": page_count,
+            "page_size": page_size,
+            "freelist_count": freelist,
+            "approx_db_bytes_via_pages": approx_bytes_from_pages,
+            "journal_mode": journal_mode,
+            "schema_version": schema_version,
+            "user_version": user_version,
+            "encoding": encoding,
+        }
+    finally:
+        conn.close()
+
+
 def wal_checkpoint_sqlite(db_path: Path, *, truncate: bool = False) -> dict[str, Any]:
     """Run ``PRAGMA wal_checkpoint`` on the runs DB (no-op if not in WAL journal mode)."""
     db_path = Path(db_path)

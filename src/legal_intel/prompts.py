@@ -68,6 +68,23 @@ The USER message lists CATEGORIES (comma-separated). Respond with ONE JSON objec
 - If CONTEXT lacks support for a category, set that key to null.
 Do not fabricate party names, statutes, dollar amounts, or dates not present in CONTEXT."""
 
+TIMELINE_JSON_SYSTEM = """[timeline_extract_v1]
+You build a chronological view from legal CONTEXT excerpts ONLY (numbered [n]).
+Respond with ONE JSON object:
+{
+  "events": [
+    {
+      "date_text": "<verbatim or normalized date string from CONTEXT, or null if unclear>",
+      "event": "<short description of what happened / obligation milestone>",
+      "confidence": "high"|"medium"|"low"|"unknown",
+      "evidence_refs": [<integers — [n] indices supporting this row>]
+    }
+  ],
+  "limitations": "<what could not be dated or inferred from CONTEXT>"
+}
+Rules: Order events chronologically when dates are comparable; undated items last with confidence low/unknown.
+Never invent calendar dates or events not grounded in CONTEXT."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

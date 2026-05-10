@@ -206,6 +206,21 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "timeline_extract_v1" in system:
+            return json.dumps(
+                {
+                    "events": [
+                        {
+                            "date_text": "[MOCK] January 15, 2026",
+                            "event": "[MOCK] Illustrative milestone from excerpts.",
+                            "confidence": "medium",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for a real timeline.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}

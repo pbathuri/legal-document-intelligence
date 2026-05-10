@@ -84,9 +84,11 @@ legal-api
    - `POST /v1/embeddings/embed-texts` — batch vectors for up to **48** strings (same embedding backend as RAG; large payloads — use for pipelines/agents on-device)
    - `POST /v1/embeddings/embed-local-text-files` — read UTF-8 files from absolute paths under **`LEGAL_INTEL_ALLOW_LOCAL_PATHS`** (≤16 paths, ≤256KiB each) → per-path vectors + errors (same embedding backend as RAG)
    - `POST /v1/embeddings/similarity` — JSON `{ "text_a", "text_b" }` → cosine similarity + embedding dimension (same backend as RAG)
+   - `POST /v1/embeddings/pairwise-matrix` — JSON `{ "texts": ["...", ...] }` (2–24 strings) → full **N×N** cosine matrix + short text previews (same embedding backend as RAG)
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local); **`device`** may include **`nvidia_gpus`** when `nvidia-smi` is available; responses include **`X-Request-ID`** (echo or generated) and **`X-Process-Time`**
    - `GET /v1/runtime/storage` — bounded filesystem inventory: bytes + file counts under **`UPLOAD_STORAGE_DIR`**, **`manifest.jsonl`** size/line estimate, **`RUNS_DB_PATH`** file size (device-local maintenance)
    - `GET /v1/runtime/git` — best-effort **Git** snapshot for the API **`cwd`** (`commit`, `branch`, `dirty` when **`git`** is on **PATH**)
+   - `GET /v1/runtime/host-metrics` — extended **psutil** snapshot: CPU sample, RAM/swap %, disk usage of **`cwd`**, boot time, bounded disk partition list (optional dependency)
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
@@ -105,6 +107,7 @@ legal-api
    - `POST /v1/rag/cross-document-summary` — retrieval from **2–12** distinct **`doc_id`** values (shared **`retrieval_query`**) + one **synthesis** memo across labeled excerpts (**`CROSS_DOCUMENT_SUMMARIZE_SYSTEM`**); returns **`sources_by_doc_id`**
    - `POST /v1/rag/cross-document-summary/stream` — **SSE**: **`sources_by_doc_id`** event + synthesis token stream + **`done`**
    - `POST /v1/rag/structured-extract` — retrieval + **`json_object`** extraction for caller-defined **`categories`** keys + **`evidence_refs`** (**`STRUCTURED_EXTRACT_SYSTEM`**; extraction-task routing)
+   - `POST /v1/rag/timeline-extract` — retrieval + JSON **timeline** (`events` with **`date_text`**, **`evidence_refs`** ↔ **`[n]`**; **`TIMELINE_JSON_SYSTEM`** / **`timeline_extract_v1`**)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
@@ -118,6 +121,7 @@ legal-api
    - `POST /v1/query/retrieve-only/batch` — batch **`retrieve-only`** (no LLM; contexts + sources per question)
    - `POST /v1/query/retrieve-only` — same retrieval + **`formatted_context`** as `/v1/query`, but **no LLM** (sources + context only); supports **`limit`** override
    - `POST /v1/ollama/generate` — forwards non-streaming requests to Ollama’s native **`POST /api/generate`** (model, prompt, optional `system`, `options`; uses origin from `OLLAMA_BASE_URL`)
+   - `POST /v1/ollama/generate/batch` — sequential native **`/api/generate`** for up to **12** prompts (same **`model`** / **`system`** / **`options`**; per-item success/error — agent batching over local Ollama)
    - `POST /v1/ollama/chat` — Ollama **`POST /api/chat`** (multi-turn **`messages`**, non-streaming; optional **`options`** merge)
    - `POST /v1/ollama/show` — Ollama **`POST /api/show`** (inspect model template, parameters, etc.)
    - `POST /v1/ollama/models/inspect-batch` — sequential **`/api/show`** for up to **8** model names (per-model success/error — agent/model introspection)
@@ -127,6 +131,7 @@ legal-api
    - `POST /v1/maintenance/integrity-sqlite` — **`PRAGMA integrity_check`** on the runs DB when **`PERSIST_RUNS=1`**
    - `POST /v1/maintenance/checkpoint-sqlite` — **`PRAGMA wal_checkpoint`** on the runs DB (JSON body **`truncate_wal`** optional); typically no-op unless journal mode is WAL
    - `POST /v1/maintenance/vacuum-sqlite` — runs **`VACUUM`** on the runs SQLite DB when **`PERSIST_RUNS=1`** (returns before/after file sizes)
+   - `GET /v1/maintenance/stats-sqlite` — **`PRAGMA`** page counts / journal mode / schema versions for **`RUNS_DB_PATH`** (read-only; **`exists: false`** when the file is absent)
 
 3. Point the **API base URL** in `index.html` (saved in browser localStorage) at your running server. Set `LEGAL_INTEL_CORS_ORIGINS` on the API if you restrict origins (default allows `*`).
 

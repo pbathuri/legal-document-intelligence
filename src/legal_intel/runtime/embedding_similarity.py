@@ -18,6 +18,36 @@ def cosine_similarity_uvec(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
+def pairwise_cosine_matrix_for_texts(texts: list[str]) -> dict[str, Any]:
+    """Encode all strings once; return full cosine similarity matrix (symmetric, diagonal 1.0)."""
+    from legal_intel.rag.embeddings import make_embedding_model
+
+    cleaned = [(t or "").strip() for t in texts]
+    if len(cleaned) < 2:
+        raise ValueError("Provide at least two non-empty texts")
+    if any(not x for x in cleaned):
+        raise ValueError("Each text must be non-empty")
+    if len(cleaned) > 24:
+        raise ValueError("At most 24 texts for pairwise matrix")
+    m = make_embedding_model()
+    vecs = m.encode(cleaned)
+    n = len(vecs)
+    dim = len(vecs[0])
+    matrix: list[list[float]] = []
+    for i in range(n):
+        row: list[float] = []
+        for j in range(n):
+            row.append(round(cosine_similarity_uvec(vecs[i], vecs[j]), 8))
+        matrix.append(row)
+    previews = [s[:120] + ("…" if len(s) > 120 else "") for s in cleaned]
+    return {
+        "count": n,
+        "dimension": dim,
+        "matrix": matrix,
+        "text_previews": previews,
+    }
+
+
 def similarity_for_text_pair(text_a: str, text_b: str) -> dict[str, Any]:
     """Encode both strings with the configured embedding backend and return cosine similarity."""
     from legal_intel.rag.embeddings import make_embedding_model
