@@ -76,6 +76,10 @@ from legal_intel.api.schemas import (
     EmbeddingNearestRankItem,
     DiligenceChecklistRequest,
     DiligenceChecklistResponse,
+    IssueSpotterRequest,
+    IssueSpotterResponse,
+    SuggestedQuestionsRequest,
+    SuggestedQuestionsResponse,
     EmbeddingPairwiseMatrixRequest,
     EmbeddingPairwiseMatrixResponse,
     OllamaGenerateBatchRequest,
@@ -117,6 +121,8 @@ from legal_intel.prompts import (
     CONTRADICTIONS_JSON_SYSTEM,
     DOCUMENT_OUTLINE_JSON_SYSTEM,
     DILIGENCE_CHECKLIST_JSON_SYSTEM,
+    ISSUE_SPOTTER_JSON_SYSTEM,
+    SUGGESTED_QUESTIONS_JSON_SYSTEM,
     STRUCTURED_EXTRACT_SYSTEM,
     TIMELINE_JSON_SYSTEM,
     SUMMARIZE_SYSTEM,
@@ -406,6 +412,26 @@ def _prepare_diligence_checklist_parts(
     )
 
 
+def _prepare_issue_spotter_parts(
+    body: IssueSpotterRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
+def _prepare_suggested_questions_parts(
+    body: SuggestedQuestionsRequest,
+) -> tuple[str, str, list[dict[str, Any]], int]:
+    return _single_doc_retrieval_context(
+        doc_id=body.doc_id,
+        retrieval_query=body.retrieval_query,
+        limit=body.limit,
+    )
+
+
 def _parse_citations_llm_json(
     raw: str,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any]]:
@@ -487,7 +513,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.21.0",
+    version="0.22.0",
 )
 
 _origins = _cors_origins()
@@ -1340,6 +1366,23 @@ def runtime_sys_path(limit: int = 64) -> dict[str, Any]:
     }
 
 
+@app.get("/v1/runtime/path-entries")
+def runtime_path_env_entries(limit: int = 80) -> dict[str, Any]:
+    """Non-empty segments from the process ``PATH`` environment variable (shell / toolchain debugging)."""
+    lim = max(8, min(limit, 200))
+    sep = os.pathsep
+    raw = os.environ.get("PATH", "")
+    parts = [p.strip() for p in raw.split(sep) if p.strip()]
+    shown = parts[:lim]
+    return {
+        "entries": shown,
+        "shown_count": len(shown),
+        "total_nonempty_segments": len(parts),
+        "truncated": len(parts) > lim,
+        "path_separator": sep,
+    }
+
+
 @app.get("/v1/settings/effective")
 def effective_settings() -> dict[str, Any]:
     """Resolved configuration with secrets redacted (safe for screenshots)."""
@@ -2154,6 +2197,116 @@ def rag_diligence_checklist_stream(body: DiligenceChecklistRequest):
             )
             for piece in chat_stream(
                 DILIGENCE_CHECKLIST_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/issue-spotter", response_model=IssueSpotterResponse)
+def rag_issue_spotter(body: IssueSpotterRequest) -> IssueSpotterResponse:
+    """Single-doc retrieval + JSON issue register (**issue_spotter_v1**)."""
+    did, user, sources, lim = _prepare_issue_spotter_parts(body)
+    raw = chat_complete_json(
+        ISSUE_SPOTTER_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        issue_register: dict[str, Any] = json.loads(raw)
+        if not isinstance(issue_register, dict):
+            issue_register = {"_value": issue_register}
+    except Exception:
+        issue_register = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return IssueSpotterResponse(
+        doc_id=did,
+        issue_register=issue_register,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/issue-spotter/stream")
+def rag_issue_spotter_stream(body: IssueSpotterRequest):
+    """SSE: sources + streaming issue JSON (**issue_spotter_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_issue_spotter_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                ISSUE_SPOTTER_JSON_SYSTEM,
+                user,
+                temperature=0.0,
+                max_tokens=8192,
+                task="extraction",
+            ):
+                yield _sse_payload({"event": "token", "text": piece})
+            yield _sse_payload({"event": "done"})
+        except Exception as e:
+            yield _sse_payload({"event": "error", "message": str(e)})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/v1/rag/suggested-questions", response_model=SuggestedQuestionsResponse)
+def rag_suggested_questions(body: SuggestedQuestionsRequest) -> SuggestedQuestionsResponse:
+    """Single-doc retrieval + JSON suggested diligence questions (**suggested_questions_v1**)."""
+    did, user, sources, lim = _prepare_suggested_questions_parts(body)
+    raw = chat_complete_json(
+        SUGGESTED_QUESTIONS_JSON_SYSTEM,
+        user,
+        temperature=0.0,
+        max_tokens=8192,
+        task="extraction",
+    )
+    try:
+        suggestions: dict[str, Any] = json.loads(raw)
+        if not isinstance(suggestions, dict):
+            suggestions = {"_value": suggestions}
+    except Exception:
+        suggestions = {"_parse_error": True, "_raw": (raw or "")[:12000]}
+    return SuggestedQuestionsResponse(
+        doc_id=did,
+        suggestions=suggestions,
+        sources=sources,
+        retrieval_top_k=lim,
+    )
+
+
+@app.post("/v1/rag/suggested-questions/stream")
+def rag_suggested_questions_stream(body: SuggestedQuestionsRequest):
+    """SSE: sources + streaming suggested-questions JSON (**suggested_questions_v1**)."""
+
+    def event_gen():
+        try:
+            did, user, sources, lim = _prepare_suggested_questions_parts(body)
+            yield _sse_payload(
+                {
+                    "event": "sources",
+                    "doc_id": did,
+                    "sources": sources,
+                    "retrieval_top_k": lim,
+                }
+            )
+            for piece in chat_stream(
+                SUGGESTED_QUESTIONS_JSON_SYSTEM,
                 user,
                 temperature=0.0,
                 max_tokens=8192,

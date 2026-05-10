@@ -1847,3 +1847,81 @@ def test_diligence_checklist_stream(api_client):
     )
     assert r.status_code == 200
     assert "sources" in r.text and "done" in r.text
+
+
+def test_runtime_path_entries(api_client):
+    r = api_client.get("/v1/runtime/path-entries")
+    assert r.status_code == 200
+    j = r.json()
+    assert "entries" in j
+    assert "path_separator" in j
+
+
+def test_issue_spotter(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="is1",
+        doc_label="iss.pdf",
+        chunks=[("Buyer may withhold up to ten percent of the purchase price in escrow.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/issue-spotter",
+        json={"doc_id": "is1", "retrieval_query": "escrow withhold"},
+    )
+    assert r.status_code == 200
+    b = r.json()
+    assert b["doc_id"] == "is1"
+    assert b["issue_register"]
+
+
+def test_issue_spotter_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="iss1",
+        doc_label="y.pdf",
+        chunks=[("Material contracts above five hundred thousand require Seller consent.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/issue-spotter/stream",
+        json={"doc_id": "iss1", "retrieval_query": "consent contracts"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text and "done" in r.text
+
+
+def test_suggested_questions(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="sq1",
+        doc_label="sq.pdf",
+        chunks=[("Intellectual property is licensed non-exclusively for the Territory.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/suggested-questions",
+        json={"doc_id": "sq1", "retrieval_query": "intellectual property"},
+    )
+    assert r.status_code == 200
+    assert r.json()["suggestions"]
+
+
+def test_suggested_questions_stream(api_client):
+    from legal_intel.rag.store import LegalVectorStore
+
+    store = LegalVectorStore()
+    store.upsert_document_chunks(
+        doc_id="sqs1",
+        doc_label="z.pdf",
+        chunks=[("Non-compete restrictions apply for eighteen months post-closing.", {"page_start": 1, "page_end": 1})],
+    )
+    r = api_client.post(
+        "/v1/rag/suggested-questions/stream",
+        json={"doc_id": "sqs1", "retrieval_query": "non-compete"},
+    )
+    assert r.status_code == 200
+    assert "sources" in r.text and "done" in r.text

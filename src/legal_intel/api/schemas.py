@@ -612,3 +612,41 @@ class DiligenceChecklistResponse(BaseModel):
     checklist: dict[str, Any]
     sources: list[dict[str, Any]]
     retrieval_top_k: int
+
+
+class IssueSpotterRequest(BaseModel):
+    """Single-doc retrieval + JSON issue register (``issue_spotter_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="risk anomaly gap inconsistency carve-out survival fundamental breach material adverse change consent assignment indemnity cap warranty disclosure",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class IssueSpotterResponse(BaseModel):
+    doc_id: str
+    issue_register: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int
+
+
+class SuggestedQuestionsRequest(BaseModel):
+    """Single-doc retrieval + JSON suggested diligence questions (``suggested_questions_v1``)."""
+
+    doc_id: str = Field(..., min_length=1)
+    retrieval_query: str = Field(
+        default="obligations representations warranties indemnity consideration termination assignment consent lien litigation permits benefits employment intellectual property",
+        min_length=1,
+        max_length=4000,
+    )
+    limit: int | None = Field(None, ge=1, le=128)
+
+
+class SuggestedQuestionsResponse(BaseModel):
+    doc_id: str
+    suggestions: dict[str, Any]
+    sources: list[dict[str, Any]]
+    retrieval_top_k: int

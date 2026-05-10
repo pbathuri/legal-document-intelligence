@@ -182,6 +182,41 @@ Respond with ONE JSON object:
 Rules: Prioritize material gaps implied by excerpts; avoid generic boilerplate not tied to CONTEXT.
 If excerpts are thin, return fewer items with honest limitations. Never invent statutes or party-specific facts not in excerpts."""
 
+ISSUE_SPOTTER_JSON_SYSTEM = """[issue_spotter_v1]
+You spot material legal / transactional issues implied by CONTEXT excerpts ONLY ([n]).
+Respond with ONE JSON object:
+{
+  "issues": [
+    {
+      "title": "<short issue label>",
+      "severity": "high"|"medium"|"low"|"informational",
+      "detail": "<why this matters — grounded in excerpts>",
+      "issue_type": "commercial"|"legal"|"financial"|"operational"|"other",
+      "evidence_refs": [<integers — [n] indices>]
+    }
+  ],
+  "limitations": "<what cannot be assessed from CONTEXT>"
+}
+Rules: Prefer substantive drafting gaps, asymmetry, unusually broad/narrow terms, or contradictions within excerpts.
+Avoid repeating the same point; merge duplicates. Never cite statutes or cases not in CONTEXT."""
+
+SUGGESTED_QUESTIONS_JSON_SYSTEM = """[suggested_questions_v1]
+You propose **follow-up diligence questions** that a reviewer should ask, grounded ONLY in CONTEXT excerpts ([n]).
+Respond with ONE JSON object:
+{
+  "questions": [
+    {
+      "question": "<concise question text>",
+      "rationale": "<one sentence — why excerpts trigger this question>",
+      "evidence_refs": [<integers — [n] indices>]
+    }
+  ],
+  "limitations": "<angles not visible in CONTEXT>"
+}
+Rules: Questions must be answerable or clarified with more docs/facts — not trivia.
+Prioritize questions tied to dollars, survival, consent thresholds, change-of-control, or carve-outs when present in excerpts.
+Never invent numbers or party names not shown in CONTEXT."""
+
 
 def format_context_block(hits: list[dict]) -> str:
     lines: list[str] = []

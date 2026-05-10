@@ -95,6 +95,7 @@ legal-api
    - `GET /v1/runtime/local-path-allowlist` — inspect **`LEGAL_INTEL_ALLOW_LOCAL_PATHS`** prefixes (exists, resolved path, **`disk_usage`** free/total per prefix root)
    - `GET /v1/runtime/rlimits` — Unix **`resource.getrlimit`** snapshot (**NOFILE**, stack, AS, …); Windows returns a short **note** instead of limits
    - `GET /v1/runtime/sys-path` — bounded **`sys.path`** prefix (`limit` query param, default 64 entries) for interpreter / packaging debugging on the API host
+   - `GET /v1/runtime/path-entries` — non-empty segments from the process **`PATH`** env var (`limit` query param, default 80; max 200) — toolchain / shell debugging on the API host
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
    - `GET /v1/runs/stats` — SQLite file size, total rows, counts **by domain**, min/max `created_at` (uses configured `RUNS_DB_PATH` even if `PERSIST_RUNS=0`)
    - `GET /v1/runs` / `GET /v1/runs/search` / `GET /v1/runs/export/json` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; substring search; JSON array or NDJSON export; Markdown memo (`final_report`)
@@ -125,6 +126,10 @@ legal-api
    - `POST /v1/rag/document-outline/stream` — **SSE**: **`sources`** + streaming outline JSON (**extraction** routing)
    - `POST /v1/rag/diligence-checklist` — retrieval + JSON **diligence checklist** (`items[]` with **`priority`** + **`evidence_refs`**; **`DILIGENCE_CHECKLIST_JSON_SYSTEM`** / **`diligence_checklist_v1`**)
    - `POST /v1/rag/diligence-checklist/stream` — **SSE**: **`sources`** + streaming checklist JSON (**extraction** routing)
+   - `POST /v1/rag/issue-spotter` — retrieval + JSON **issues** register (**`ISSUE_SPOTTER_JSON_SYSTEM`** / **`issue_spotter_v1`**)
+   - `POST /v1/rag/issue-spotter/stream` — **SSE**: **`sources`** + streaming issue JSON (**extraction** routing)
+   - `POST /v1/rag/suggested-questions` — retrieval + JSON **follow-up diligence questions** (**`SUGGESTED_QUESTIONS_JSON_SYSTEM`** / **`suggested_questions_v1`**)
+   - `POST /v1/rag/suggested-questions/stream` — **SSE**: **`sources`** + streaming suggested-questions JSON (**extraction** routing)
    - `GET /v1/uploads/manifest` — tail of `manifest.jsonl` beside persisted uploads (requires `PERSIST_UPLOADS`)
    - `GET /v1/uploads/files` — bounded listing of files under **`UPLOAD_STORAGE_DIR`** (mtime-descending; requires **`PERSIST_UPLOADS`**)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`

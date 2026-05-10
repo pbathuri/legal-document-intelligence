@@ -298,6 +298,36 @@ def chat_complete_json(
                     "_mock": True,
                 }
             )
+        if "issue_spotter_v1" in system:
+            return json.dumps(
+                {
+                    "issues": [
+                        {
+                            "title": "[MOCK] Illustrative issue",
+                            "severity": "informational",
+                            "detail": "[MOCK] Example gap suggested by excerpts.",
+                            "issue_type": "legal",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real issue spotting.",
+                    "_mock": True,
+                }
+            )
+        if "suggested_questions_v1" in system:
+            return json.dumps(
+                {
+                    "questions": [
+                        {
+                            "question": "[MOCK] What approvals are required prior to assignment?",
+                            "rationale": "[MOCK] Excerpts reference assignment restrictions.",
+                            "evidence_refs": [1],
+                        }
+                    ],
+                    "limitations": "Mock LLM — disable LEGAL_INTEL_MOCK_LLM for real suggested questions.",
+                    "_mock": True,
+                }
+            )
         return '{"doc_type":"unknown","seller_names":[],"buyer_names":[],"parcel_ids":[],"evidence":[],"mentions_dispute":false,"mentions_encumbrance":false}'
     model = resolve_model_for_task(task)
     model_kwargs = {"response_format": {"type": "json_object"}}
