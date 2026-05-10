@@ -1,0 +1,54 @@
+tests/test_api.py
+  s_c7571ff3b984be::t_34166ce9258b40 719-844
+index.html
+  s_c7571ff3b984be::t_42b6d6184804dd 296-297
+  s_c7571ff3b984be::t_f8d66dcf224a69 305
+  s_c7571ff3b984be::t_6ebab45de316d2 423-448
+  s_c7571ff3b984be::t_98101cd3507a75 848-868
+  s_c7571ff3b984be::t_0de805ec7980c0 956-1001
+  s_c7571ff3b984be::t_a99ee475f07f33 776-793
+src/legal_intel/runtime/ollama_version_proxy.py
+  s_c7571ff3b984be::t_7d5b15f43427be 1-22
+README.md
+  s_c7571ff3b984be::t_8ae58b02b649b1 93
+  s_c7571ff3b984be::t_0b2bb667ce5510 106
+  s_c7571ff3b984be::t_d5f7e9303b6ba9 77-78
+  s_c7571ff3b984be::t_40edaabcfbea70 103
+.env.example
+  s_c7571ff3b984be::t_54536c295bc2a1 47
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_826831b94945c2 144-171
+src/legal_intel/persistence/runs.py
+  s_c7571ff3b984be::t_8c41f526331e8b 136-149
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_12e7659b7800fd 370-388
+  s_c7571ff3b984be::t_6239d9bd0d754d 935-953
+  s_c7571ff3b984be::t_ee3e02a69aac29 31-32
+  s_c7571ff3b984be::t_d6e15a88df8040 117
+  s_c7571ff3b984be::t_8da605122c1585 527-552
+  s_c7571ff3b984be::t_0f3b125cca49b1 64,66,69
+  s_c7571ff3b984be::t_0032b9bae6ee64 52
+  s_c7571ff3b984be::t_309309f90c1ade 211
+  s_c7571ff3b984be::t_e5f5aa9690830c 483-495
+  s_c7571ff3b984be::t_a9651a9fcedf3e 575-588
+src/legal_intel/runtime/chunk_near_duplicate.py
+  s_c7571ff3b984be::t_751d4b755cee9d 1-102
+src/legal_intel/runtime/ollama_chat_proxy.py
+  s_c7571ff3b984be::t_7dd60c8932771f 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "1e8cc626c410c869a9adfa9143b24e6ba110aef2",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
