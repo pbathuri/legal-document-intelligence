@@ -1,0 +1,53 @@
+src/legal_intel/persistence/runs.py
+  s_c7571ff3b984be::t_b54a84f793cf2c 11
+  s_c7571ff3b984be::t_03b9ae35c3ffc7 99-137
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_fc42110a7083b3 34
+  s_c7571ff3b984be::t_192afa48ded1f8 82
+  s_c7571ff3b984be::t_b182087919c888 28-33,35
+  s_c7571ff3b984be::t_81f67969144563 52
+src/legal_intel/runtime/device_profile.py
+  s_c7571ff3b984be::t_0e47b15c7db35e 1-33
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_8c939cc2d41cfc 295-296,298-321,323-328,331-332,335,339-340,348,350-351,354
+  s_c7571ff3b984be::t_22ab2998b1772f 333,336-338,341-347,349,352-353,355-356
+  s_c7571ff3b984be::t_5c9a96ff7eb902 160-161,181
+  s_c7571ff3b984be::t_1ec48c240eaa2b 196,200-203
+  s_c7571ff3b984be::t_8a2e797390697c 19,30-37,40,45
+  s_c7571ff3b984be::t_a3a894e879f9ed 60-126,131
+  s_c7571ff3b984be::t_d7861ddccd028b 263-277
+index.html
+  s_c7571ff3b984be::t_915fa10ed2daa8 280-281,284
+  s_c7571ff3b984be::t_77bfc3a4e5b01c 500-526
+README.md
+  s_c7571ff3b984be::t_36a9fbee451fdf 102-105
+  s_c7571ff3b984be::t_cd067abceb6e9a 73-76
+  s_c7571ff3b984be::t_f767c0d44e0f94 71
+tests/test_api.py
+  s_c7571ff3b984be::t_d76d1bbaab2ea0 199-283
+  s_c7571ff3b984be::t_6b0dda4cd5843c 190-192
+src/legal_intel/pipeline.py
+  s_c7571ff3b984be::t_8785050a5b4912 5
+  s_c7571ff3b984be::t_854c275843508e 31,37-38,86-108
+pyproject.toml
+  s_c7571ff3b984be::t_623faefdb270e3 63-65
+src/legal_intel/runtime/ollama_warnings.py
+  s_c7571ff3b984be::t_68a6ca8d4eccfb 30,32-35
+  s_c7571ff3b984be::t_3a1ba2ffec7f8e 1-29,31,36-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "621bd4eb1cb2a49da3210c5a11acfeb135400252",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
