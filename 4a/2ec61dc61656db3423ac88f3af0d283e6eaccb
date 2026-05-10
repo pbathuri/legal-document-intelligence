@@ -1,0 +1,77 @@
+tests/conftest.py
+  s_c7571ff3b984be::t_df83ec4b02246c 10
+src/legal_intel/rag/store.py
+  s_c7571ff3b984be::t_adfb08b73afb50 36,38
+  s_c7571ff3b984be::t_2de58c116d4e09 11
+src/legal_intel/rag/__init__.py
+  s_c7571ff3b984be::t_24dd3226cdcc40 1,3-4
+src/legal_intel/rag/ollama_embed.py
+  s_c7571ff3b984be::t_59a86e74fb91e1 1-48
+tests/test_api.py
+  s_c7571ff3b984be::t_c56e87e89ae77d 299-301
+  s_c7571ff3b984be::t_ea1b52b57156a6 206-220
+  s_c7571ff3b984be::t_c8a0dbd77e124a 302
+  s_c7571ff3b984be::t_d53a9c17c2e4b1 37
+  s_c7571ff3b984be::t_983c5449680a3f 19
+README.md
+  s_c7571ff3b984be::t_0ee81e903fe510 104-105
+  s_c7571ff3b984be::t_30aa82db110806 68-69
+  s_c7571ff3b984be::t_d9da89f2070eb9 72
+  s_c7571ff3b984be::t_7c2f4292a39d57 77
+src/legal_intel/config.py
+  s_c7571ff3b984be::t_b4995cb367b564 13
+  s_c7571ff3b984be::t_f047f11dfd0ad2 36-37,39
+  s_c7571ff3b984be::t_a64cf13d0aa142 81-82
+src/legal_intel/runtime/preflight.py
+  s_c7571ff3b984be::t_ea794fd32f89f2 41-45
+  s_c7571ff3b984be::t_741b855100c20e 1-12,14,17-40,46-110,117
+  s_c7571ff3b984be::t_7954ca8c9ee9a6 111-116,118
+src/legal_intel/rag/embeddings.py
+  s_c7571ff3b984be::t_7d384c87d16b24 2-5,7,9,11-13,16-19,23,27,33-36,39-79
+src/legal_intel/runtime/ollama_warnings.py
+  s_c7571ff3b984be::t_3c3eb665e2466f 53-58
+src/legal_intel/runtime/local_paths.py
+  s_c7571ff3b984be::t_cc626b3f92cce0 1-29
+src/legal_intel/api/schemas.py
+  s_c7571ff3b984be::t_58935260646e49 23-29
+  s_c7571ff3b984be::t_1a948de51d6078 49-50
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_f7f18cf2589e87 136,149-154
+  s_c7571ff3b984be::t_34e231b4176410 350-382
+  s_c7571ff3b984be::t_9460bca8c9fd44 200-205
+  s_c7571ff3b984be::t_2fdb84df0dd940 79
+  s_c7571ff3b984be::t_dd1922c3b772c7 9,15-16,24
+  s_c7571ff3b984be::t_d0055c34b8f0e7 44,50
+  s_c7571ff3b984be::t_e755b511721853 299-332
+  s_c7571ff3b984be::t_1a11a1a8d6f6aa 179-180
+  s_c7571ff3b984be::t_be40863e1044b3 396
+.env.example
+  s_c7571ff3b984be::t_509edd9d13eb13 20-28
+tests/test_ollama_embed.py
+  s_c7571ff3b984be::t_ca7b32496a7b68 10-11,17-18,20,22,24-28
+  s_c7571ff3b984be::t_1d0117fbd20bd7 1-9,12-16,19,21,23,29-31
+tests/test_local_paths.py
+  s_c7571ff3b984be::t_5c27dd4cf40b86 1-21
+index.html
+  s_c7571ff3b984be::t_7da3dd8c5e1731 284,286
+  s_c7571ff3b984be::t_a364527a47da9a 367
+  s_c7571ff3b984be::t_fb023625baa11b 530-550
+  s_c7571ff3b984be::t_6ed2731f2c4eb5 608-616
+  s_c7571ff3b984be::t_25e38b9ad104b4 649
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "4a2ec61dc61656db3423ac88f3af0d283e6eaccb",
+  "prompts": {},
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "default"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
