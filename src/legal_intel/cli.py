@@ -1,4 +1,5 @@
 """Batch due diligence from the command line."""
+
 from __future__ import annotations
 import argparse
 import json
@@ -6,6 +7,7 @@ import sys
 from legal_intel.config import get_settings
 from legal_intel.graph.build import run_diligence, run_diligence_india
 from legal_intel.pipeline import ingest_pdf
+
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Run diligence graph on indexed PDFs.")
@@ -34,6 +36,7 @@ def main() -> None:
         print(json.dumps(dict(out), indent=2, default=str))
     else:
         print(out.get("final_report", ""))
+
 
 if __name__ == "__main__":
     main()

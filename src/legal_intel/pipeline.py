@@ -81,8 +81,7 @@ def ingest_pdf_with_stats(
         if c.section_label:
             extra["section_label"] = c.section_label
         tuples.append((c.text, extra))
-    n = store.upsert_document_chunks(
-        doc_id=resolved_id, doc_label=label, chunks=tuples)
+    n = store.upsert_document_chunks(doc_id=resolved_id, doc_label=label, chunks=tuples)
     stats: dict[str, Any] = {
         "page_count": page_count,
         "char_count": len(text),

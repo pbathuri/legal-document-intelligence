@@ -1,4 +1,5 @@
 """Integration-style tests for LLM client wiring (mock server by default)."""
+
 from unittest.mock import MagicMock, patch
 
 import pytest

@@ -65,14 +65,16 @@ legal-api
 ```
 
 2. Endpoints (selection):
-   - `GET /health` — mock/live LLM, Qdrant, resolved multimodel names; when `LLM_PROVIDER=ollama`, lists models from local **Ollama** `/api/tags`
+   - `GET /health` — mock/live LLM, embedding provider, Qdrant, resolved multimodel names; when `LLM_PROVIDER=ollama`, lists models from local **Ollama** `/api/tags`
+   - `GET /v1/preflight` — single JSON for ops: Qdrant ping, Ollama `/api/tags` + optional `/api/embed` probe, disk, `device` profile
    - `GET /v1/runtime` — Python version, cwd, resolved upload DB paths (device-local)
    - `GET /v1/agents` — LangGraph node lists + model routing map (all agents use your Ollama/vLLM routing)
-   - `GET /v1/runs` / `GET /v1/runs/export` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history + NDJSON export (route order-safe)
+   - `GET /v1/runs` / `GET /v1/runs/export` / `GET /v1/runs/{id}/memo.md` / `GET /v1/runs/{id}` / `DELETE /v1/runs/{id}` — SQLite history; NDJSON export; Markdown memo (`final_report`)
    - `GET /v1/disk` — free space on volume holding upload storage
    - `GET /v1/settings/effective` — full resolved config with **secrets redacted**
    - `GET /v1/qdrant/info` — collection existence + point count (uses same client as RAG, including in-process `:memory:`)
    - `POST /v1/ingest` — multipart PDF → includes **page/char stats** and optional `persisted_path`
+   - `POST /v1/ingest/local` — JSON body `{ "path": "/absolute/file.pdf", "use_ocr": false }` — only if `LEGAL_INTEL_ALLOW_LOCAL_PATHS` lists allowed absolute directory prefixes (comma-separated)
    - `POST /v1/ingest/batch` — many PDFs in one request → `{ items[], errors[] }`
    - `POST /v1/analyze` — full graph run; returns optional `run_id` when persistence enabled
    - `POST /v1/analyze/stream` — **SSE** (`text/event-stream`) LangGraph step updates + final merged state
@@ -98,6 +100,8 @@ legal-api
 ```
 
 Environment names map to `llm_provider`, `ollama_base_url`, `llm_model_*` in [`src/legal_intel/config.py`](src/legal_intel/config.py) (`LLM_PROVIDER`, `OLLAMA_BASE_URL`, etc.).
+
+**Embeddings**: Default `EMBEDDING_PROVIDER=ollama` calls Ollama’s native `POST /api/embed` with `OLLAMA_EMBEDDING_MODEL` (e.g. `nomic-embed-text` after `ollama pull nomic-embed-text`), keeping vectors on the same stack as your agents. Use `EMBEDDING_PROVIDER=sentence_transformers` and `EMBEDDING_MODEL=…` for offline tests or when you prefer HuggingFace weights.
 
 **Optional host metrics**: `pip install -e ".[device]"` installs `psutil` for RAM/disk detail in [`GET /v1/runtime`](src/legal_intel/runtime/device_profile.py) (`device` object).
 

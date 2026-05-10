@@ -16,6 +16,7 @@ def api_client():
     os.environ["PERSIST_UPLOADS"] = "0"
     os.environ["PERSIST_RUNS"] = "0"
     os.environ["LLM_PROVIDER"] = "openai_compatible"
+    os.environ["EMBEDDING_PROVIDER"] = "sentence_transformers"
     from legal_intel.config import get_settings
 
     get_settings.cache_clear()
@@ -33,6 +34,7 @@ def test_health(api_client):
     body = r.json()
     assert body["status"] == "ok"
     assert body["mock_llm"] is True
+    assert body["embedding_provider"] == "sentence_transformers"
     assert "models" in body
 
 
@@ -73,7 +75,10 @@ def test_query_grounded(api_client):
         doc_id="q1",
         doc_label="nda.pdf",
         chunks=[
-            ("Confidential Information must not be disclosed for 3 years.", {"page_start": 1, "page_end": 1}),
+            (
+                "Confidential Information must not be disclosed for 3 years.",
+                {"page_start": 1, "page_end": 1},
+            ),
         ],
     )
     r = api_client.post(
@@ -198,6 +203,21 @@ def test_disk(api_client):
     assert "free_bytes" in r.json()
 
 
+def test_preflight(api_client):
+    r = api_client.get("/v1/preflight")
+    assert r.status_code == 200
+    body = r.json()
+    assert "ready" in body
+    assert "checks" in body
+    assert body["checks"]["embedding_provider"] == "sentence_transformers"
+    assert body["checks"]["qdrant"]["ok"] is True
+
+
+def test_local_ingest_disabled(api_client):
+    r = api_client.post("/v1/ingest/local", json={"path": "/tmp/x.pdf"})
+    assert r.status_code == 403
+
+
 def test_effective_settings_redacts(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "secret-value-do-not-leak")
     monkeypatch.setenv("LEGAL_INTEL_MOCK_LLM", "1")
@@ -276,6 +296,10 @@ def test_export_delete_run(tmp_path, monkeypatch):
         exp = client.get("/v1/runs/export")
         assert exp.status_code == 200
         assert rid in exp.text
+        memo = client.get(f"/v1/runs/{rid}/memo.md")
+        assert memo.status_code == 200
+        assert "Diligence memo" in memo.text
+        assert memo.headers.get("content-type", "").startswith("text/markdown")
         dr = client.delete(f"/v1/runs/{rid}")
         assert dr.status_code == 200
         gr = client.get(f"/v1/runs/{rid}")

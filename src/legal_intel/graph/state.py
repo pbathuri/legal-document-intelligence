@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TypedDict
 
+
 class DiligenceState(TypedDict, total=False):
     user_query: str
     retrieved_context: str
@@ -9,6 +10,7 @@ class DiligenceState(TypedDict, total=False):
     cross_ref_section: str
     compliance_section: str
     final_report: str
+
 
 class IndiaDiligenceState(TypedDict, total=False):
     user_query: str

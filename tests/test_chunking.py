@@ -21,21 +21,22 @@ def test_empty_text_produces_no_chunks():
 
 
 def test_short_text_single_chunk():
-    chunks = chunk_text("hello world", chunk_size=200,
-                        chunk_overlap=50, page_count=1)
+    chunks = chunk_text("hello world", chunk_size=200, chunk_overlap=50, page_count=1)
     assert len(chunks) == 1
     assert chunks[0].text == "hello world"
 
 
 def test_structural_split_schedule():
     text = "Intro line\n\nSCHEDULE OF PROPERTY\nPlot 1 details.\n\nRECITALS\nSome recital."
-    chunks = chunk_text_structural(
-        text, chunk_size=500, chunk_overlap=50, page_count=2)
+    chunks = chunk_text_structural(text, chunk_size=500, chunk_overlap=50, page_count=2)
     assert len(chunks) >= 2
     labels = [c.section_label for c in chunks if c.section_label]
-    assert any(
-        "SCHEDULE" in (lbl or "").upper() or "RECITALS" in (lbl or "").upper() for lbl in labels
-    ) or len(chunks) >= 2
+    assert (
+        any(
+            "SCHEDULE" in (lbl or "").upper() or "RECITALS" in (lbl or "").upper() for lbl in labels
+        )
+        or len(chunks) >= 2
+    )
 
 
 def test_chunk_pages_structural_per_page():

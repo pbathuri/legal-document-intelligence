@@ -1,4 +1,5 @@
 """CLI for running scrapers and building training datasets."""
+
 from __future__ import annotations
 
 import argparse
@@ -32,25 +33,21 @@ def main() -> None:
         pass
 
     p = argparse.ArgumentParser(description="Run land-record scrapers")
-    p.add_argument("source", choices=list(
-        SCRAPERS.keys()), help="Scraper source")
+    p.add_argument("source", choices=list(SCRAPERS.keys()), help="Scraper source")
     p.add_argument("--district", default=None)
     p.add_argument("--party-name", default=None)
     p.add_argument("--survey-number", default=None)
     p.add_argument("--year", type=int, default=None)
     p.add_argument("--max-results", type=int, default=20)
     p.add_argument("--output", default=None, help="Output JSON path")
-    p.add_argument("--training", action="store_true",
-                   help="Also output training records")
+    p.add_argument("--training", action="store_true", help="Also output training records")
     p.add_argument(
         "--query",
         default="property dispute possession",
         help="Indian Kanoon search query (source=kanoon)",
     )
-    p.add_argument("--pagenum", type=int, default=0,
-                   help="Kanoon results page (0-based)")
-    p.add_argument("--doctypes", default=None,
-                   help="Kanoon doctypes filter (optional)")
+    p.add_argument("--pagenum", type=int, default=0, help="Kanoon results page (0-based)")
+    p.add_argument("--doctypes", default=None, help="Kanoon doctypes filter (optional)")
     p.add_argument(
         "--no-full-text",
         action="store_true",
@@ -70,13 +67,12 @@ def main() -> None:
         )
     elif args.source == "ecourts":
         scraper = ECourtsScraper()
-        results = scraper.scrape(
-            party_name=args.party_name, max_results=args.max_results
-        )
+        results = scraper.scrape(party_name=args.party_name, max_results=args.max_results)
     elif args.source == "kaveri":
         scraper = KaveriScraper()
         results = scraper.scrape(
-            district=args.district, survey_number=args.survey_number,
+            district=args.district,
+            survey_number=args.survey_number,
             max_results=args.max_results,
         )
     elif args.source == "kanoon":
@@ -92,8 +88,7 @@ def main() -> None:
         print(f"Unknown source: {args.source}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Scraped {len(results)} records from {args.source}",
-          file=sys.stderr)
+    print(f"Scraped {len(results)} records from {args.source}", file=sys.stderr)
 
     if args.write_raw:
         if args.source == "kanoon":
@@ -115,9 +110,7 @@ def main() -> None:
         raw_dir = Path(scraper.settings.scraper_data_dir) / args.source
         raw_dir.mkdir(parents=True, exist_ok=True)
         raw_path = raw_dir / f"batch_{slug}.json"
-        normalized = dedupe_records(
-            [normalize_land_record(r, source=args.source) for r in results]
-        )
+        normalized = dedupe_records([normalize_land_record(r, source=args.source) for r in results])
         write_records_json(raw_path, normalized)
         print(
             f"Wrote {len(normalized)} normalized records → {raw_path}",
@@ -125,22 +118,19 @@ def main() -> None:
         )
 
     if args.output:
-        Path(args.output).write_text(json.dumps(
-            results, indent=2), encoding="utf-8")
+        Path(args.output).write_text(json.dumps(results, indent=2), encoding="utf-8")
     else:
         print(json.dumps(results, indent=2))
 
     if args.training:
         training_records = [scraper.to_training_record(r) for r in results]
         training_records = [r for r in training_records if r is not None]
-        base = Path(args.output) if args.output else Path(
-            f"{args.source}_training.jsonl")
+        base = Path(args.output) if args.output else Path(f"{args.source}_training.jsonl")
         out_path = base.with_suffix(".training.jsonl")
         with open(out_path, "w", encoding="utf-8") as f:
             for rec in training_records:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-        print(
-            f"Wrote {len(training_records)} training records → {out_path}", file=sys.stderr)
+        print(f"Wrote {len(training_records)} training records → {out_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

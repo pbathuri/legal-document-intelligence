@@ -20,6 +20,13 @@ class QueryRequest(BaseModel):
     )
 
 
+class LocalPathIngestRequest(BaseModel):
+    """Ingest a PDF from an absolute path on the API host (allowlisted prefixes only)."""
+
+    path: str = Field(..., min_length=1)
+    use_ocr: bool = False
+
+
 class IngestResponse(BaseModel):
     doc_id: str
     doc_label: str
@@ -39,6 +46,8 @@ class HealthResponse(BaseModel):
     status: str
     mock_llm: bool
     llm_provider: str
+    embedding_provider: str = "sentence_transformers"
+    ollama_embedding_model: str = ""
     qdrant_url: str
     diligence_domain_default: str
     models: dict[str, str]

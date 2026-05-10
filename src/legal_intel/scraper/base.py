@@ -1,4 +1,5 @@
 """Base scraper class with rate limiting and data persistence using Scrapling."""
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class BaseScraper(ABC):
     """Base class for all land-record scrapers.
-    
+
     Implements:
     - Rate limiting between requests
     - Result caching to disk (data/raw/<source>/)
@@ -40,10 +41,11 @@ class BaseScraper(ABC):
         self._last_request_time = time.time()
 
     def _get_fetcher(self):
-        """Get a Scrapling Fetcher (StealthyFetcher for JS-heavy sites, 
+        """Get a Scrapling Fetcher (StealthyFetcher for JS-heavy sites,
         Fetcher for simple ones)."""
         try:
             from scrapling import Fetcher
+
             return Fetcher(auto_match=True)
         except ImportError:
             logger.warning("scrapling not installed. Using synthetic data fallback.")
@@ -53,6 +55,7 @@ class BaseScraper(ABC):
         """Get a stealth fetcher for sites with bot detection."""
         try:
             from scrapling import StealthyFetcher
+
             return StealthyFetcher(auto_match=True)
         except ImportError:
             logger.warning("scrapling not installed. Using synthetic data fallback.")

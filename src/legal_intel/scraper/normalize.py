@@ -1,4 +1,5 @@
 """Normalize and deduplicate scraped records for the data lake + training prep."""
+
 from __future__ import annotations
 
 import hashlib
@@ -23,6 +24,7 @@ def dedupe_records(
 ) -> list[dict[str, Any]]:
     """Keep first occurrence per key(rec). Default key uses tid, case_number, or doc hash."""
     if key is None:
+
         def default_key(r: dict[str, Any]) -> tuple[Any, ...]:
             if r.get("tid") is not None:
                 return ("tid", r["tid"])
@@ -30,7 +32,10 @@ def dedupe_records(
                 return ("case", str(r["case_number"]))
             if r.get("document_number"):
                 return ("doc", str(r["document_number"]), str(r.get("registration_date", "")))
-            return ("hash", hashlib.md5(json.dumps(r, sort_keys=True, default=str).encode()).hexdigest())
+            return (
+                "hash",
+                hashlib.md5(json.dumps(r, sort_keys=True, default=str).encode()).hexdigest(),
+            )
 
         key = default_key
 
@@ -60,5 +65,6 @@ def normalize_land_record(rec: dict[str, Any], *, source: str) -> dict[str, Any]
 def write_records_json(path: Path, records: list[dict[str, Any]]) -> None:
     """Write {records: [...]} for compatibility with training.prepare.load_scraped_records."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"records": records},
-                    indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(
+        json.dumps({"records": records}, indent=2, ensure_ascii=False), encoding="utf-8"
+    )

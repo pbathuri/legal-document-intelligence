@@ -3,6 +3,7 @@
 Tesseract (default) or optional PaddleOCR backend. Falls back to PyMuPDF text
 when OCR is disabled or engines are unavailable.
 """
+
 from __future__ import annotations
 
 import io
@@ -59,8 +60,7 @@ def _get_paddle_engine():
     if _paddle_engine is None:
         from paddleocr import PaddleOCR
 
-        _paddle_engine = PaddleOCR(
-            use_angle_cls=True, lang="en", show_log=False)
+        _paddle_engine = PaddleOCR(use_angle_cls=True, lang="en", show_log=False)
     return _paddle_engine
 
 
@@ -91,8 +91,9 @@ def ocr_pdf(path: str, *, force_ocr: bool = False) -> list[tuple[int, str]]:
     s = get_settings()
     doc = fitz.open(path)
     pages: list[tuple[int, str]] = []
-    use_ocr = s.ocr_enabled and (_tesseract_available() or (
-        s.ocr_backend == "paddle" and _paddle_available()))
+    use_ocr = s.ocr_enabled and (
+        _tesseract_available() or (s.ocr_backend == "paddle" and _paddle_available())
+    )
 
     try:
         for i in range(len(doc)):

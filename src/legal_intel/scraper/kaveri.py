@@ -5,6 +5,7 @@ Kaveri is Karnataka's registration and stamps portal providing:
 - Document search by SRO/year/document number
 - Property valuation guidance
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -35,7 +36,7 @@ class KaveriScraper(BaseScraper):
         max_results: int | None = None,
     ) -> list[dict[str, Any]]:
         max_results = max_results or self.settings.scraper_max_pages
-        
+
         cache_key = f"kaveri_{district}_{survey_number}_{ec_year_from}_{ec_year_to}"
         cache_id = hashlib.md5(cache_key.encode()).hexdigest()[:12]
         cached = self._load_cached(cache_id)
@@ -44,12 +45,14 @@ class KaveriScraper(BaseScraper):
 
         results: list[dict[str, Any]] = []
         fetcher = self._get_fetcher()
-        
+
         if fetcher is None:
-            results = self._generate_sample_ec(district, survey_number, ec_year_from, ec_year_to, max_results)
+            results = self._generate_sample_ec(
+                district, survey_number, ec_year_from, ec_year_to, max_results
+            )
             self._save_result(cache_id, {"query": cache_key, "records": results})
             return results
-        
+
         try:
             self._rate_limit()
             response = fetcher.get(self.BASE_URL, timeout=30)
@@ -60,49 +63,64 @@ class KaveriScraper(BaseScraper):
                     for row in table.css("tr")[1:max_results]:
                         cells = row.css("td")
                         if cells:
-                            results.append({
-                                "raw": [c.text.strip() for c in cells],
-                                "district": district,
-                                "survey_number": survey_number,
-                            })
+                            results.append(
+                                {
+                                    "raw": [c.text.strip() for c in cells],
+                                    "district": district,
+                                    "survey_number": survey_number,
+                                }
+                            )
         except Exception as e:
             logger.warning("Kaveri scrape failed (expected in demo): %s", e)
-            results = self._generate_sample_ec(district, survey_number, ec_year_from, ec_year_to, max_results)
-        
+            results = self._generate_sample_ec(
+                district, survey_number, ec_year_from, ec_year_to, max_results
+            )
+
         self._save_result(cache_id, {"query": cache_key, "records": results})
         return results
 
     def _generate_sample_ec(
-        self, district: str | None, survey_no: str | None,
-        yr_from: int | None, yr_to: int | None, count: int,
+        self,
+        district: str | None,
+        survey_no: str | None,
+        yr_from: int | None,
+        yr_to: int | None,
+        count: int,
     ) -> list[dict[str, Any]]:
         """Generate synthetic EC (Encumbrance Certificate) entries."""
         import random
-        
+
         encumbrance_types = [
-            "Sale Deed", "Gift Deed", "Mortgage Deed", "Release Deed",
-            "Partition Deed", "Agreement of Sale", "Power of Attorney",
+            "Sale Deed",
+            "Gift Deed",
+            "Mortgage Deed",
+            "Release Deed",
+            "Partition Deed",
+            "Agreement of Sale",
+            "Power of Attorney",
         ]
-        
+
         records = []
         for i in range(min(count, 10)):
             yr = random.randint(yr_from or 2010, yr_to or 2025)
             has_mortgage = random.random() < 0.3
-            records.append({
-                "ec_entry_number": i + 1,
-                "document_type": random.choice(encumbrance_types),
-                "document_number": f"{random.randint(1000, 9999)}/{yr}",
-                "registration_date": f"{yr}-{random.randint(1,12):02d}-{random.randint(1,28):02d}",
-                "sro": f"SRO {district or 'Bangalore North'}",
-                "executant": f"Party_{random.randint(1, 20)}",
-                "claimant": f"Party_{random.randint(1, 20)}",
-                "survey_number": survey_no or f"{random.randint(1,500)}/A",
-                "extent": f"{random.randint(500, 5000)} sq.ft",
-                "consideration": str(random.randint(10, 200) * 100000),
-                "has_mortgage": has_mortgage,
-                "mortgage_to": "State Bank of India" if has_mortgage else None,
-                "is_synthetic": True,
-            })
+            records.append(
+                {
+                    "ec_entry_number": i + 1,
+                    "document_type": random.choice(encumbrance_types),
+                    "document_number": f"{random.randint(1000, 9999)}/{yr}",
+                    "registration_date": f"{yr}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
+                    "sro": f"SRO {district or 'Bangalore North'}",
+                    "executant": f"Party_{random.randint(1, 20)}",
+                    "claimant": f"Party_{random.randint(1, 20)}",
+                    "survey_number": survey_no or f"{random.randint(1, 500)}/A",
+                    "extent": f"{random.randint(500, 5000)} sq.ft",
+                    "consideration": str(random.randint(10, 200) * 100000),
+                    "has_mortgage": has_mortgage,
+                    "mortgage_to": "State Bank of India" if has_mortgage else None,
+                    "is_synthetic": True,
+                }
+            )
         return records
 
     def to_training_record(self, raw: dict[str, Any]) -> dict[str, Any] | None:
@@ -120,7 +138,7 @@ class KaveriScraper(BaseScraper):
         )
         if raw.get("has_mortgage"):
             ec_text += f"\nMortgage to: {raw.get('mortgage_to', 'N/A')}"
-        
+
         return {
             "instruction": (
                 "Analyze this Encumbrance Certificate entry. Extract: document type, "

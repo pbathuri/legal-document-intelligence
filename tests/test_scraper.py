@@ -1,4 +1,5 @@
 """Test scraper generates synthetic data correctly."""
+
 import json
 
 import legal_intel.scraper.base as scraper_base
@@ -13,8 +14,7 @@ from legal_intel.scraper.normalize import dedupe_records, normalize_land_record
 
 def test_igrs_synthetic():
     scraper = IGRSScraper(state="telangana")
-    records = scraper._generate_sample_data(
-        "Hyderabad", None, 2024, "sale_deed", 5)
+    records = scraper._generate_sample_data("Hyderabad", None, 2024, "sale_deed", 5)
     assert len(records) == 5
     for r in records:
         assert "seller_names" in r
@@ -24,8 +24,7 @@ def test_igrs_synthetic():
 
 def test_igrs_to_training():
     scraper = IGRSScraper()
-    records = scraper._generate_sample_data(
-        "Hyderabad", None, 2024, "sale_deed", 3)
+    records = scraper._generate_sample_data("Hyderabad", None, 2024, "sale_deed", 3)
     for r in records:
         tr = scraper.to_training_record(r)
         assert tr is not None
@@ -143,8 +142,7 @@ def test_kanoon_backfill_full_text(tmp_path, monkeypatch):
         scraper_rate_limit=0.0,
     )
     monkeypatch.setattr(scraper_base, "get_settings", lambda: fake)
-    monkeypatch.setattr(IndianKanoonScraper,
-                        "_fetch_document_json", fake_fetch)
+    monkeypatch.setattr(IndianKanoonScraper, "_fetch_document_json", fake_fetch)
     get_settings.cache_clear()
     scraper = IndianKanoonScraper()
     corpus = tmp_path / "corpus.jsonl"

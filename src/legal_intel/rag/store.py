@@ -8,7 +8,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qm
 
 from legal_intel.config import get_settings
-from legal_intel.rag.embeddings import EmbeddingModel
+from legal_intel.rag.embeddings import make_embedding_model
 
 
 @lru_cache(maxsize=1)
@@ -33,9 +33,9 @@ def _vector_size_from_collection(info: Any) -> int | None:
 
 
 class LegalVectorStore:
-    def __init__(self, embedding: EmbeddingModel | None = None, client: QdrantClient | None = None) -> None:
+    def __init__(self, embedding: Any | None = None, client: QdrantClient | None = None) -> None:
         s = get_settings()
-        self._emb = embedding or EmbeddingModel()
+        self._emb = embedding or make_embedding_model()
         self._collection = s.qdrant_collection
         if client is not None:
             self._client = client
@@ -57,11 +57,12 @@ class LegalVectorStore:
         if not self._client.collection_exists(name):
             self._client.create_collection(
                 collection_name=name,
-                vectors_config=qm.VectorParams(
-                    size=dim, distance=qm.Distance.COSINE),
+                vectors_config=qm.VectorParams(size=dim, distance=qm.Distance.COSINE),
             )
 
-    def upsert_document_chunks(self, *, doc_id: str, doc_label: str, chunks: list[tuple[str, dict[str, Any]]]) -> int:
+    def upsert_document_chunks(
+        self, *, doc_id: str, doc_label: str, chunks: list[tuple[str, dict[str, Any]]]
+    ) -> int:
         if not chunks:
             return 0
         texts = [c[0] for c in chunks]
@@ -69,8 +70,13 @@ class LegalVectorStore:
         points: list[qm.PointStruct] = []
         for i, ((text, extra), vec) in enumerate(zip(chunks, vectors, strict=True)):
             pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}:{i}"))
-            payload = {"doc_id": doc_id, "doc_label": doc_label,
-                       "chunk_index": i, "text": text, **extra}
+            payload = {
+                "doc_id": doc_id,
+                "doc_label": doc_label,
+                "chunk_index": i,
+                "text": text,
+                **extra,
+            }
             points.append(qm.PointStruct(id=pid, vector=vec, payload=payload))
         self._client.upsert(collection_name=self._collection, points=points)
         return len(points)
@@ -79,14 +85,14 @@ class LegalVectorStore:
         s = get_settings()
         fetch_limit = limit
         if s.rerank_enabled:
-            fetch_limit = min(
-                256, max(limit, limit * s.retrieval_rerank_multiplier))
+            fetch_limit = min(256, max(limit, limit * s.retrieval_rerank_multiplier))
 
         vec = self._emb.encode([query])[0]
         q_filter = None
         if doc_id:
-            q_filter = qm.Filter(must=[qm.FieldCondition(
-                key="doc_id", match=qm.MatchValue(value=doc_id))])
+            q_filter = qm.Filter(
+                must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))]
+            )
         res = self._client.query_points(
             collection_name=self._collection,
             query=vec,

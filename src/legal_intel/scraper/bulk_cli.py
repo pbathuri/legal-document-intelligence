@@ -1,4 +1,5 @@
 """CLI for large-scale scraper harvests (Indian Kanoon corpus, checkpoints, JSONL)."""
+
 from __future__ import annotations
 
 import argparse
@@ -67,8 +68,7 @@ def main() -> None:
         default=1,
         help="Indian Kanoon maxpages per request (1–50; higher = fewer round-trips)",
     )
-    kn.add_argument("--doctypes", default=None,
-                    help="Optional doctypes filter (IK docs)")
+    kn.add_argument("--doctypes", default=None, help="Optional doctypes filter (IK docs)")
     kn.add_argument(
         "--fetch-full-text",
         action="store_true",

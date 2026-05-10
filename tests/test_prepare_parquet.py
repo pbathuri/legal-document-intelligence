@@ -1,4 +1,5 @@
 """Parquet export for training prep (requires pyarrow)."""
+
 import json
 
 import pytest

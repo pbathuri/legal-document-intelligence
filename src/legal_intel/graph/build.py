@@ -10,20 +10,28 @@ from legal_intel.config import DiligenceDomain, get_settings
 from legal_intel.graph.state import DiligenceState, IndiaDiligenceState
 from legal_intel.india.extraction import extract_instrument_fact
 from legal_intel.india.prompts_india import (
-    CHAIN_SYSTEM, ENCUMBRANCE_SYSTEM, RECORDS_SYSTEM,
-    RETRIEVAL_QUERY_SUFFIX, SYNTHESIS_INDIA_SYSTEM,
+    CHAIN_SYSTEM,
+    ENCUMBRANCE_SYSTEM,
+    RECORDS_SYSTEM,
+    RETRIEVAL_QUERY_SUFFIX,
+    SYNTHESIS_INDIA_SYSTEM,
 )
 from legal_intel.india.schemas import InstrumentFact
 from legal_intel.india.title_graph import TitleGraph
 from legal_intel.llm.client import chat_complete
 from legal_intel.prompts import (
-    COMPLIANCE_SYSTEM, CROSS_REF_SYSTEM, OBLIGATION_SYSTEM,
-    RISK_SYSTEM, SYNTHESIS_SYSTEM, format_context_block,
+    COMPLIANCE_SYSTEM,
+    CROSS_REF_SYSTEM,
+    OBLIGATION_SYSTEM,
+    RISK_SYSTEM,
+    SYNTHESIS_SYSTEM,
+    format_context_block,
 )
 from legal_intel.rag.store import LegalVectorStore
 
 
 # ===== M&A graph nodes =====
+
 
 def _retrieve(state: DiligenceState) -> DiligenceState:
     s = get_settings()
@@ -74,7 +82,9 @@ def _synthesize(state: DiligenceState) -> DiligenceState:
         f"## Cross-document\n{state.get('cross_ref_section', '')}\n\n"
         f"## Compliance\n{state.get('compliance_section', '')}\n"
     )
-    user = f"ORIGINAL USER REQUEST:\n{state.get('user_query', '')}\n\nSPECIALIST SECTIONS:\n{bundle}"
+    user = (
+        f"ORIGINAL USER REQUEST:\n{state.get('user_query', '')}\n\nSPECIALIST SECTIONS:\n{bundle}"
+    )
     out = chat_complete(SYNTHESIS_SYSTEM, user, temperature=0.1, task="synthesis")
     return {"final_report": out}
 
@@ -103,6 +113,7 @@ def run_diligence(user_query: str) -> DiligenceState:
 
 
 # ===== India property diligence graph =====
+
 
 def _retrieve_india(state: IndiaDiligenceState) -> IndiaDiligenceState:
     s = get_settings()
@@ -250,12 +261,18 @@ def build_graph_india():
     return g.compile()
 
 
-def run_diligence_india(user_query: str, doc_ids: list[str], doc_labels: dict[str, str] | None = None) -> IndiaDiligenceState:
+def run_diligence_india(
+    user_query: str, doc_ids: list[str], doc_labels: dict[str, str] | None = None
+) -> IndiaDiligenceState:
     graph = build_graph_india()
-    return graph.invoke({"user_query": user_query, "doc_ids": doc_ids, "doc_labels": doc_labels or {}})
+    return graph.invoke(
+        {"user_query": user_query, "doc_ids": doc_ids, "doc_labels": doc_labels or {}}
+    )
 
 
-def run_diligence_auto(user_query: str, doc_ids: list[str] | None = None, doc_labels: dict[str, str] | None = None) -> DiligenceState | IndiaDiligenceState:
+def run_diligence_auto(
+    user_query: str, doc_ids: list[str] | None = None, doc_labels: dict[str, str] | None = None
+) -> DiligenceState | IndiaDiligenceState:
     s = get_settings()
     if s.diligence_domain == "india_re":
         return run_diligence_india(user_query, doc_ids or [], doc_labels)

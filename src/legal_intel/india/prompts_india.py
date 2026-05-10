@@ -36,6 +36,8 @@ RETRIEVAL_QUERY_SUFFIX = (
     "gift partition consideration schedule boundary dispute registration sub-registrar"
 )
 
+
 def format_title_graph_for_prompt(tg_json: dict) -> str:
     import json
+
     return json.dumps(tg_json, indent=2)[:24000]

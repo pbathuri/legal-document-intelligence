@@ -50,4 +50,10 @@ def build_ollama_model_warnings(settings: Settings, ollama_tags: list[str] | Non
             warnings.append(
                 f"Model `{key}` ({role}) not found in local Ollama tags — run `ollama pull {key.split(':')[0]}`"
             )
+    if settings.embedding_provider == "ollama":
+        emb = settings.ollama_embedding_model.strip()
+        if emb and not _model_resolves(emb, ollama_tags):
+            warnings.append(
+                f"Embedding model `{emb}` not found in local Ollama tags — run `ollama pull {emb.split(':')[0]}`"
+            )
     return warnings

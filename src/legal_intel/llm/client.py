@@ -99,7 +99,7 @@ def _langfuse_callbacks() -> list[BaseCallbackHandler]:
         return [CallbackHandler(**kw)]
     except ImportError as e:
         logger.warning(
-            "Langfuse tracing disabled: install observability extras (pip install -e \".[observability]\"): %s",
+            'Langfuse tracing disabled: install observability extras (pip install -e ".[observability]"): %s',
             e,
         )
         return []

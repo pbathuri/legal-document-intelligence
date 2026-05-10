@@ -6,11 +6,13 @@ from typing import Any
 from legal_intel.config import get_settings
 from legal_intel.india.schemas import InstrumentFact
 
+
 def _norm_name(s: str) -> str:
     s = s.lower().strip()
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", " ", s)
     return s
+
 
 def _fuzzy_match(a: str, b: str, threshold: float) -> bool:
     if not a or not b:
@@ -19,6 +21,7 @@ def _fuzzy_match(a: str, b: str, threshold: float) -> bool:
     if na == nb:
         return True
     return difflib.SequenceMatcher(None, na, nb).ratio() >= threshold
+
 
 def _year_from_fact(f: InstrumentFact) -> int | None:
     for d in (f.execution_date, f.registration_date):
@@ -31,6 +34,7 @@ def _year_from_fact(f: InstrumentFact) -> int | None:
             except ValueError:
                 pass
     return None
+
 
 @dataclass
 class TitleGraph:
@@ -64,7 +68,13 @@ class TitleGraph:
             linked.add(e[1])
         for did, fact in self.nodes.items():
             if did not in linked and len(self.nodes) > 1:
-                issues.append({"kind": "orphan_or_unlinked", "doc_id": did, "detail": "No inferred chain edge; verify missing prior deed or name mismatch."})
+                issues.append(
+                    {
+                        "kind": "orphan_or_unlinked",
+                        "doc_id": did,
+                        "detail": "No inferred chain edge; verify missing prior deed or name mismatch.",
+                    }
+                )
         years: list[tuple[str, int]] = []
         for did, fact in self.nodes.items():
             y = _year_from_fact(fact)
@@ -73,12 +83,24 @@ class TitleGraph:
         years.sort(key=lambda x: x[1])
         for k in range(1, len(years)):
             if years[k][1] - years[k - 1][1] > 50:
-                issues.append({"kind": "large_year_gap", "doc_ids": [years[k - 1][0], years[k][0]], "detail": f"Years {years[k-1][1]} → {years[k][1]} — check for missing instruments."})
+                issues.append(
+                    {
+                        "kind": "large_year_gap",
+                        "doc_ids": [years[k - 1][0], years[k][0]],
+                        "detail": f"Years {years[k - 1][1]} → {years[k][1]} — check for missing instruments.",
+                    }
+                )
         parcels = {did: set(p.lower() for p in f.parcel_ids) for did, f in self.nodes.items()}
         for e in self.edges:
             p0, p1 = parcels.get(e[0], set()), parcels.get(e[1], set())
             if p0 and p1 and not (p0 & p1):
-                issues.append({"kind": "parcel_id_drift", "doc_ids": [e[0], e[1]], "detail": "Linked chain but parcel identifiers do not overlap; verify survey/khata updates."})
+                issues.append(
+                    {
+                        "kind": "parcel_id_drift",
+                        "doc_ids": [e[0], e[1]],
+                        "detail": "Linked chain but parcel identifiers do not overlap; verify survey/khata updates.",
+                    }
+                )
         return issues
 
     def to_json(self) -> dict[str, Any]:

@@ -10,12 +10,11 @@ LlmProvider = Literal["openai_compatible", "ollama"]
 LlmTaskKind = Literal["extraction", "specialist", "synthesis"]
 ChunkingMode = Literal["fixed", "structural"]
 OcrBackend = Literal["tesseract", "paddle"]
+EmbeddingProvider = Literal["sentence_transformers", "ollama"]
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
     # LLM — default to local Ollama agents (OpenAI-compatible /v1); override for vLLM/cloud
     llm_provider: LlmProvider = "ollama"
     """Use `ollama` with `ollama_base_url` (OpenAI-compatible prefix, e.g. http://localhost:11434/v1)."""
@@ -34,8 +33,10 @@ class Settings(BaseSettings):
     # Extraction
     extraction_max_pages: int = 10
     titlegraph_name_fuzzy_threshold: float = 0.82
-    # RAG
+    # RAG — default embeddings via Ollama (/api/embed); tests force sentence_transformers
+    embedding_provider: EmbeddingProvider = "ollama"
     embedding_model: str = "BAAI/bge-m3"
+    ollama_embedding_model: str = "nomic-embed-text"
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "legal_chunks"
     chunk_size: int = 1200
@@ -77,6 +78,8 @@ class Settings(BaseSettings):
     persist_runs: bool = True
     runs_db_path: str = "data/local/runs.db"
     ollama_probe_timeout_seconds: float = 2.0
+    # Comma-separated absolute path prefixes allowed for POST /v1/ingest/local (empty = disabled)
+    legal_intel_allow_local_paths: str = ""
 
 
 @functools.lru_cache(maxsize=1)

@@ -11,6 +11,7 @@ Target: fine-tune Llama 3.1 8B or 70B on MI300X using:
 - LoRA (Parameter-Efficient Fine-Tuning)
 - ROCm + PyTorch + HuggingFace PEFT/TRL
 """
+
 from __future__ import annotations
 
 import argparse
@@ -174,21 +175,25 @@ def record_to_sft_examples(record: dict[str, Any]) -> list[dict[str, str]]:
     doc_text = _build_document_text(record)
     if doc_text:
         expected_output = _build_extraction_output(record)
-        examples.append({
-            "instruction": EXTRACTION_TEMPLATE.split("### Document:")[0].strip(),
-            "input": doc_text,
-            "output": json.dumps(expected_output, ensure_ascii=False),
-        })
+        examples.append(
+            {
+                "instruction": EXTRACTION_TEMPLATE.split("### Document:")[0].strip(),
+                "input": doc_text,
+                "output": json.dumps(expected_output, ensure_ascii=False),
+            }
+        )
 
     # Task 2: Risk assessment (if record has risk indicators)
     if record.get("has_mortgage") or record.get("property_related"):
         risk_input = _build_risk_input(record)
         risk_output = _build_risk_output(record)
-        examples.append({
-            "instruction": RISK_ASSESSMENT_TEMPLATE.split("### Record:")[0].strip(),
-            "input": risk_input,
-            "output": json.dumps(risk_output, ensure_ascii=False),
-        })
+        examples.append(
+            {
+                "instruction": RISK_ASSESSMENT_TEMPLATE.split("### Record:")[0].strip(),
+                "input": risk_input,
+                "output": json.dumps(risk_output, ensure_ascii=False),
+            }
+        )
 
     return examples
 
@@ -196,8 +201,7 @@ def record_to_sft_examples(record: dict[str, Any]) -> list[dict[str, str]]:
 def _build_document_text(record: dict[str, Any]) -> str:
     """Build a realistic document text from a structured record."""
     if record.get("doc_type") == "court_judgment" or (
-        record.get("tid") is not None
-        and (record.get("headline") or record.get("full_text_plain"))
+        record.get("tid") is not None and (record.get("headline") or record.get("full_text_plain"))
     ):
         lines: list[str] = []
         if record.get("title"):
@@ -235,8 +239,7 @@ def _build_document_text(record: dict[str, Any]) -> str:
         parts.append(f"Buyer/Claimant: {buyers}")
 
     if record.get("survey_number") or record.get("survey_numbers"):
-        sn = record.get("survey_number") or ", ".join(
-            record.get("survey_numbers", []))
+        sn = record.get("survey_number") or ", ".join(record.get("survey_numbers", []))
         parts.append(f"Survey Number: {sn}")
     if record.get("property_description"):
         parts.append(f"Property: {record['property_description']}")
@@ -251,15 +254,14 @@ def _build_extraction_output(record: dict[str, Any]) -> dict[str, Any]:
     doc_t = record.get("doc_type") or record.get("document_type", "unknown")
     mentions_dispute = record.get("mentions_dispute")
     if mentions_dispute is None:
-        mentions_dispute = doc_t == "court_judgment" or bool(
-            record.get("property_related", False)
-        )
+        mentions_dispute = doc_t == "court_judgment" or bool(record.get("property_related", False))
     return {
         "doc_type": doc_t,
         "registration_date": record.get("registration_date") or record.get("publishdate"),
         "seller_names": record.get("seller_names", []),
         "buyer_names": record.get("buyer_names", []),
-        "parcel_ids": record.get("survey_numbers", []) or ([record["survey_number"]] if record.get("survey_number") else []),
+        "parcel_ids": record.get("survey_numbers", [])
+        or ([record["survey_number"]] if record.get("survey_number") else []),
         "locality": record.get("district") or record.get("locality") or record.get("docsource"),
         "consideration_amount": record.get("consideration") or record.get("consideration_amount"),
         "mentions_dispute": mentions_dispute,
@@ -274,8 +276,7 @@ def _build_risk_input(record: dict[str, Any]) -> str:
     if record.get("subject"):
         parts.append(f"Case Subject: {record['subject']}")
     if record.get("has_mortgage"):
-        parts.append(
-            f"Mortgage to: {record.get('mortgage_to', 'Unknown lender')}")
+        parts.append(f"Mortgage to: {record.get('mortgage_to', 'Unknown lender')}")
     return "\n".join(parts)
 
 
@@ -288,20 +289,17 @@ def _build_risk_output(record: dict[str, Any]) -> dict[str, Any]:
     if record.get("has_mortgage"):
         risk = "HIGH"
         factors.append("Active mortgage/charge on property")
-        recommendations.append(
-            "Obtain NOC/release deed from mortgagee before purchase")
+        recommendations.append("Obtain NOC/release deed from mortgagee before purchase")
         blocks = True
     if record.get("status") == "Pending":
         risk = "HIGH"
         factors.append("Pending litigation involving property")
-        recommendations.append(
-            "Obtain legal opinion on case merits and likely timeline")
+        recommendations.append("Obtain legal opinion on case merits and likely timeline")
         blocks = True
     if record.get("property_related") and record.get("status") == "Disposed":
         risk = "MEDIUM"
         factors.append("Past litigation involving property (now disposed)")
-        recommendations.append(
-            "Verify final court order and ensure compliance")
+        recommendations.append("Verify final court order and ensure compliance")
 
     return {
         "risk_level": risk,
@@ -322,8 +320,7 @@ def _write_parquet(path: Path, data: list[dict[str, Any]]) -> None:
         import pyarrow as pa
         import pyarrow.parquet as pq
     except ImportError as e:
-        raise ImportError(
-            "Install pyarrow (pip install pyarrow) for Parquet export") from e
+        raise ImportError("Install pyarrow (pip install pyarrow) for Parquet export") from e
     if not data:
         return
     table = pa.Table.from_pylist(data)
@@ -353,8 +350,11 @@ def prepare_dataset(
         examples = record_to_sft_examples(rec)
         for ex in examples:
             # Filter by approximate token count (chars/4 approx tokens)
-            total_len = len(ex.get("instruction", "")) + \
-                len(ex.get("input", "")) + len(ex.get("output", ""))
+            total_len = (
+                len(ex.get("instruction", ""))
+                + len(ex.get("input", ""))
+                + len(ex.get("output", ""))
+            )
             if total_len // 4 <= max_seq_len:
                 row: dict[str, Any] = dict(ex)
                 for meta_key in (
@@ -414,22 +414,17 @@ def prepare_dataset(
     config_path = output_path / "training_config.json"
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
-    stats = {"train": len(train), "val": len(
-        val), "total_records": len(records)}
+    stats = {"train": len(train), "val": len(val), "total_records": len(records)}
     logger.info("Dataset prepared: %s", stats)
     return stats
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    ap = argparse.ArgumentParser(
-        description="Prepare training data from scraped records")
-    ap.add_argument("--data-dir", default="data/raw",
-                    help="Raw scraped data directory")
-    ap.add_argument("--output-dir", default="data/training",
-                    help="Output directory")
-    ap.add_argument("--manifest", default=None,
-                    help="Optional JSONL manifest of curated uploads")
+    ap = argparse.ArgumentParser(description="Prepare training data from scraped records")
+    ap.add_argument("--data-dir", default="data/raw", help="Raw scraped data directory")
+    ap.add_argument("--output-dir", default="data/training", help="Output directory")
+    ap.add_argument("--manifest", default=None, help="Optional JSONL manifest of curated uploads")
     ap.add_argument(
         "--format",
         choices=("jsonl", "parquet", "both"),

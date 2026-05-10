@@ -1,4 +1,5 @@
 """Test training data preparation pipeline."""
+
 import json
 import tempfile
 from pathlib import Path

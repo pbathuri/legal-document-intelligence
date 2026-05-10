@@ -6,12 +6,14 @@ import platform
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
+from starlette.requests import Request
 
 from legal_intel.api.schemas import (
     AnalyzeRequest,
@@ -19,6 +21,7 @@ from legal_intel.api.schemas import (
     BatchIngestResponse,
     HealthResponse,
     IngestResponse,
+    LocalPathIngestRequest,
     QueryRequest,
     QueryResponse,
     RunSummaryOut,
@@ -38,11 +41,13 @@ from legal_intel.pipeline import doc_id_from_pdf_bytes, ingest_pdf_with_stats
 from legal_intel.prompts import QUERY_SYSTEM, format_context_block
 from legal_intel.rag.store import LegalVectorStore
 from legal_intel.runtime.device_profile import gather_device_profile
+from legal_intel.runtime.local_paths import is_path_under_allowlist, parse_allow_prefixes
 from legal_intel.runtime.ollama_probe import (
     fetch_ollama_model_names,
     ollama_origin_from_openai_base,
 )
 from legal_intel.runtime.ollama_warnings import build_ollama_model_warnings
+from legal_intel.runtime.preflight import gather_preflight
 from legal_intel.runtime.uploads import persist_pdf_bytes
 
 
@@ -71,7 +76,7 @@ def _public_settings_dict() -> dict[str, Any]:
     return d
 
 
-async def _ingest_pdf_core(content: bytes, filename: str, use_ocr: bool) -> IngestResponse:
+def _ingest_pdf_core_bytes(content: bytes, filename: str, use_ocr: bool) -> IngestResponse:
     if not filename:
         raise HTTPException(status_code=400, detail="Missing filename")
     if Path(filename).suffix.lower() != ".pdf":
@@ -128,7 +133,7 @@ app = FastAPI(
     title="Legal Document Intelligence API",
     description="Ingest PDFs, run agentic diligence (India RE / M&A), or ask grounded questions. "
     "Optimized for local Ollama agents + on-device storage.",
-    version="0.5.0",
+    version="0.6.0",
 )
 
 _origins = _cors_origins()
@@ -139,6 +144,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    response.headers["X-Process-Time"] = f"{time.perf_counter() - start:.4f}"
+    return response
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -163,6 +176,8 @@ def health() -> HealthResponse:
         status="ok",
         mock_llm=s.legal_intel_mock_llm,
         llm_provider=s.llm_provider,
+        embedding_provider=s.embedding_provider,
+        ollama_embedding_model=s.ollama_embedding_model,
         qdrant_url=s.qdrant_url,
         diligence_domain_default=s.diligence_domain,
         models={
@@ -180,6 +195,12 @@ def health() -> HealthResponse:
         runs_db_path=s.runs_db_path,
         warnings=warns,
     )
+
+
+@app.get("/v1/preflight")
+def preflight() -> dict[str, Any]:
+    """Single payload for dashboards: Qdrant, Ollama tags/embed, disk, device."""
+    return gather_preflight()
 
 
 @app.get("/v1/runtime", response_model=RuntimeOut)
@@ -275,6 +296,40 @@ def export_runs_ndjson(limit: int = 50_000):
     return StreamingResponse(gen(), media_type="application/x-ndjson")
 
 
+def _memo_markdown_from_run(row: dict[str, Any]) -> str:
+    res = row.get("result") or {}
+    body = res.get("final_report")
+    if body is None:
+        body = json.dumps(res, indent=2, default=str)
+    elif not isinstance(body, str):
+        body = str(body)
+    header_lines = [
+        "# Diligence memo",
+        "",
+        f"- **Run id**: `{row.get('id')}`",
+        f"- **Created**: {row.get('created_at')}",
+        f"- **Domain**: {row.get('domain')}",
+        f"- **Query**: {row.get('query')}",
+        "",
+        "---",
+        "",
+    ]
+    return "\n".join(header_lines) + body
+
+
+@app.get("/v1/runs/{run_id}/memo.md", response_class=PlainTextResponse)
+def export_run_memo(run_id: str) -> PlainTextResponse:
+    """Export ``final_report`` as Markdown/plain text."""
+    s = get_settings()
+    if not s.persist_runs:
+        raise HTTPException(status_code=404, detail="Run persistence disabled")
+    row = get_run(db_path=Path(s.runs_db_path), run_id=run_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    text = _memo_markdown_from_run(row)
+    return PlainTextResponse(text, media_type="text/markdown; charset=utf-8")
+
+
 @app.get("/v1/runs/{run_id}")
 def get_diligence_run(run_id: str) -> dict[str, Any]:
     s = get_settings()
@@ -292,7 +347,39 @@ async def ingest_upload(
     use_ocr: bool = False,
 ) -> IngestResponse:
     content = await file.read()
-    return await _ingest_pdf_core(content, file.filename or "", use_ocr)
+    return _ingest_pdf_core_bytes(content, file.filename or "", use_ocr)
+
+
+@app.post("/v1/ingest/local", response_model=IngestResponse)
+def ingest_local_pdf(body: LocalPathIngestRequest) -> IngestResponse:
+    """Index a PDF already on disk (requires ``LEGAL_INTEL_ALLOW_LOCAL_PATHS``)."""
+    s = get_settings()
+    raw_allow = (s.legal_intel_allow_local_paths or "").strip()
+    if not raw_allow:
+        raise HTTPException(
+            status_code=403,
+            detail="Local path ingest disabled. Set LEGAL_INTEL_ALLOW_LOCAL_PATHS to comma-separated absolute directory prefixes.",
+        )
+    prefixes = parse_allow_prefixes(raw_allow)
+    if not prefixes:
+        raise HTTPException(status_code=403, detail="No valid allowlist prefixes configured.")
+    try:
+        p = Path(body.path).expanduser().resolve()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid path: {e}") from e
+    if not p.is_file():
+        raise HTTPException(status_code=400, detail="Path is not a file")
+    if p.suffix.lower() != ".pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    if not is_path_under_allowlist(p, prefixes):
+        raise HTTPException(
+            status_code=403,
+            detail="Path is not under any configured allow prefix",
+        )
+    content = p.read_bytes()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    return _ingest_pdf_core_bytes(content, p.name, body.use_ocr)
 
 
 @app.post("/v1/ingest/batch", response_model=BatchIngestResponse)
@@ -306,7 +393,7 @@ async def ingest_batch(
     for f in files:
         try:
             raw = await f.read()
-            items.append(await _ingest_pdf_core(raw, f.filename or "unnamed.pdf", use_ocr))
+            items.append(_ingest_pdf_core_bytes(raw, f.filename or "unnamed.pdf", use_ocr))
         except HTTPException as he:
             detail = he.detail
             if isinstance(detail, list):
@@ -470,9 +557,7 @@ def rag_query_stream(body: QueryRequest):
                 )
             yield _sse_payload({"event": "sources", "sources": src})
             user = f"QUESTION:\n{body.question}\n\nCONTEXT EXCERPTS:\n{ctx}"
-            for piece in chat_stream(
-                QUERY_SYSTEM, user, temperature=0.05, task="specialist"
-            ):
+            for piece in chat_stream(QUERY_SYSTEM, user, temperature=0.05, task="specialist"):
                 yield _sse_payload({"event": "token", "text": piece})
             yield _sse_payload({"event": "done"})
         except Exception as e:

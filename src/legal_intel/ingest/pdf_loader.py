@@ -179,12 +179,9 @@ def chunk_text(
         end = min(start + chunk_size, n)
         piece = text[start:end].strip()
         if piece:
-            ps = max(1, min(page_count, 1 +
-                     int((start / max(n, 1)) * (page_count - 1))))
-            pe = max(ps, min(page_count, 1 +
-                     int((end / max(n, 1)) * (page_count - 1))))
-            chunks.append(TextChunk(text=piece, page_start=ps,
-                          page_end=pe, chunk_index=idx))
+            ps = max(1, min(page_count, 1 + int((start / max(n, 1)) * (page_count - 1))))
+            pe = max(ps, min(page_count, 1 + int((end / max(n, 1)) * (page_count - 1))))
+            chunks.append(TextChunk(text=piece, page_start=ps, page_end=pe, chunk_index=idx))
             idx += 1
         if end >= n:
             break

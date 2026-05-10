@@ -8,6 +8,7 @@ publicly available case search API/pages.
 Use case: detect pending litigation / lis pendens on a property
 by searching party names or case numbers from the property packet.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -51,8 +52,7 @@ class ECourtsScraper(BaseScraper):
 
         if fetcher is None:
             results = self._generate_sample_disputes(party_name, max_results)
-            self._save_result(
-                cache_id, {"query": cache_key, "records": results})
+            self._save_result(cache_id, {"query": cache_key, "records": results})
             return results
 
         try:
@@ -68,12 +68,14 @@ class ECourtsScraper(BaseScraper):
                     for row in table.css("tr")[1:max_results]:
                         cells = row.css("td")
                         if len(cells) >= 3:
-                            results.append({
-                                "case_number": cells[0].text.strip() if cells else "",
-                                "parties": cells[1].text.strip() if len(cells) > 1 else "",
-                                "status": cells[2].text.strip() if len(cells) > 2 else "",
-                                "state_code": state_code,
-                            })
+                            results.append(
+                                {
+                                    "case_number": cells[0].text.strip() if cells else "",
+                                    "parties": cells[1].text.strip() if len(cells) > 1 else "",
+                                    "status": cells[2].text.strip() if len(cells) > 2 else "",
+                                    "state_code": state_code,
+                                }
+                            )
         except Exception as e:
             logger.warning("e-Courts scrape failed (expected in demo): %s", e)
             # Generate synthetic dispute data
@@ -82,37 +84,40 @@ class ECourtsScraper(BaseScraper):
         self._save_result(cache_id, {"query": cache_key, "records": results})
         return results
 
-    def _generate_sample_disputes(
-        self, party_name: str | None, count: int
-    ) -> list[dict[str, Any]]:
+    def _generate_sample_disputes(self, party_name: str | None, count: int) -> list[dict[str, Any]]:
         """Synthetic litigation records for pipeline testing."""
         import random
 
         case_types = [
-            "OS (Original Suit)", "SA (Second Appeal)",
-            "CRP (Civil Revision Petition)", "WP (Writ Petition)"
+            "OS (Original Suit)",
+            "SA (Second Appeal)",
+            "CRP (Civil Revision Petition)",
+            "WP (Writ Petition)",
         ]
-        statuses = ["Pending", "Disposed",
-                    "Pending - Next hearing scheduled", "Transferred"]
+        statuses = ["Pending", "Disposed", "Pending - Next hearing scheduled", "Transferred"]
 
         records = []
         for i in range(min(count, 5)):
             yr = random.randint(2018, 2025)
-            records.append({
-                "case_number": f"{random.choice(case_types)} No. {random.randint(100, 9999)}/{yr}",
-                "parties": f"{party_name or 'Petitioner'} vs State of Telangana & Others",
-                "status": random.choice(statuses),
-                "court": f"District Court, {'Hyderabad' if i % 2 == 0 else 'Rangareddy'}",
-                "filing_date": f"{yr}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
-                "property_related": random.choice([True, True, True, False]),
-                "subject": random.choice([
-                    "Suit for declaration of title and possession",
-                    "Suit for permanent injunction",
-                    "Partition suit",
-                    "Suit for specific performance of agreement of sale",
-                ]),
-                "is_synthetic": True,
-            })
+            records.append(
+                {
+                    "case_number": f"{random.choice(case_types)} No. {random.randint(100, 9999)}/{yr}",
+                    "parties": f"{party_name or 'Petitioner'} vs State of Telangana & Others",
+                    "status": random.choice(statuses),
+                    "court": f"District Court, {'Hyderabad' if i % 2 == 0 else 'Rangareddy'}",
+                    "filing_date": f"{yr}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
+                    "property_related": random.choice([True, True, True, False]),
+                    "subject": random.choice(
+                        [
+                            "Suit for declaration of title and possession",
+                            "Suit for permanent injunction",
+                            "Partition suit",
+                            "Suit for specific performance of agreement of sale",
+                        ]
+                    ),
+                    "is_synthetic": True,
+                }
+            )
         return records
 
     def to_training_record(self, raw: dict[str, Any]) -> dict[str, Any] | None:

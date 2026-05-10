@@ -281,7 +281,9 @@
         <button type="button" id="btnQdrant">Qdrant info</button>
         <button type="button" id="btnDisk">Disk space</button>
         <button type="button" id="btnRuns">Recent runs</button>
+        <button type="button" id="btnPreflight">Preflight</button>
         <button type="button" id="btnExportRuns">Export runs (NDJSON)</button>
+        <button type="button" id="btnMemoRun">Open run memo (.md)</button>
       </div>
       <pre class="sources" id="metaOut" style="margin-top:0.65rem;max-height:220px;display:none;"></pre>
     </div>
@@ -362,6 +364,7 @@
     let activeDomain = "india_re";
     let indexedDocs = [];
     let lastResult = null;
+    let lastRunId = null;
     let streamLogAcc = "";
 
     const $ = (id) => document.getElementById(id);
@@ -524,6 +527,27 @@
         alert(e.message || String(e));
       }
     };
+    $("btnPreflight").onclick = async () => {
+      try {
+        const r = await fetchJson("/v1/preflight");
+        $("metaOut").style.display = "block";
+        $("metaOut").textContent = JSON.stringify(r, null, 2);
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+    $("btnMemoRun").onclick = async () => {
+      try {
+        const base = ($("apiBase").value || "").trim().replace(/\/$/, "");
+        if (!base) throw new Error("Set API base URL first.");
+        const def = lastRunId || "";
+        const rid = window.prompt("Run id (from persisted diligence)", def);
+        if (!rid) return;
+        window.open(base + "/v1/runs/" + encodeURIComponent(rid.trim()) + "/memo.md", "_blank");
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
 
     $("tabIndia").onclick = () => setTab("india_re");
     $("tabMna").onclick = () => setTab("mna");
@@ -581,12 +605,15 @@
         await readSseStream("/v1/analyze/stream", body, (ev) => {
           streamLogAcc += JSON.stringify(ev) + "\n";
           $("streamLog").textContent = streamLogAcc;
-          if (ev.event === "done" && ev.result) {
-            lastResult = ev.result;
-            $("reportEmpty").style.display = "none";
-            $("reportOut").style.display = "block";
-            $("reportOut").textContent = ev.result.final_report || JSON.stringify(ev.result, null, 2);
-            $("btnDownloadJson").style.display = "inline-block";
+          if (ev.event === "done") {
+            if (ev.run_id) lastRunId = ev.run_id;
+            if (ev.result) {
+              lastResult = ev.result;
+              $("reportEmpty").style.display = "none";
+              $("reportOut").style.display = "block";
+              $("reportOut").textContent = ev.result.final_report || JSON.stringify(ev.result, null, 2);
+              $("btnDownloadJson").style.display = "inline-block";
+            }
           }
         });
       } catch (e) {
@@ -619,6 +646,7 @@
         });
         lastResult = out.result;
         if (out.run_id) {
+          lastRunId = out.run_id;
           streamLogAcc = "run_id: " + out.run_id + "\n";
           $("streamLog").textContent = streamLogAcc;
         }

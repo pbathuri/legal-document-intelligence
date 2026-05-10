@@ -1,4 +1,5 @@
 """Cross-encoder re-ranking for legal RAG (optional)."""
+
 from __future__ import annotations
 
 import logging
@@ -34,8 +35,7 @@ def rerank_hits(
         for h, sc in zip(hits, scores, strict=True):
             h["rerank_score"] = float(sc)
             h["score"] = float(sc)
-        ranked = sorted(hits, key=lambda x: x.get(
-            "rerank_score", 0.0), reverse=True)
+        ranked = sorted(hits, key=lambda x: x.get("rerank_score", 0.0), reverse=True)
         if top_k is not None:
             ranked = ranked[:top_k]
         return ranked

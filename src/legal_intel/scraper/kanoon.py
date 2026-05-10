@@ -5,6 +5,7 @@ records so the training pipeline stays testable.
 
 API docs: https://api.indiankanoon.org/documentation/
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -76,18 +77,15 @@ class IndianKanoonScraper(BaseScraper):
                 "(shell assignment alone does not pass to subprocesses) or add it to project `.env`."
             )
             records = [
-                _annotate_judgment_record(r)
-                for r in self._synthetic_judgments(query, max_results)
+                _annotate_judgment_record(r) for r in self._synthetic_judgments(query, max_results)
             ]
             if persist_to_disk:
-                self._save_result(
-                    cache_id, {"query": cache_key, "records": records})
+                self._save_result(cache_id, {"query": cache_key, "records": records})
             return records
 
         records: list[dict[str, Any]] = []
         try:
-            params: dict[str, str | int] = {
-                "formInput": query, "pagenum": pagenum}
+            params: dict[str, str | int] = {"formInput": query, "pagenum": pagenum}
             if doctypes:
                 params["doctypes"] = doctypes
             data = self._api_search(params)
@@ -117,20 +115,17 @@ class IndianKanoonScraper(BaseScraper):
                     full = self._fetch_document_json(int(tid))
                     if full:
                         raw_html = full.get("doc") or ""
-                        rec["full_text_plain"] = _strip_html(
-                            raw_html) if raw_html else ""
+                        rec["full_text_plain"] = _strip_html(raw_html) if raw_html else ""
                         rec["cite"] = full.get("cite")
                 records.append(_annotate_judgment_record(rec))
         except Exception as e:
             logger.warning("Indian Kanoon API failed: %s", e)
             records = [
-                _annotate_judgment_record(r)
-                for r in self._synthetic_judgments(query, max_results)
+                _annotate_judgment_record(r) for r in self._synthetic_judgments(query, max_results)
             ]
 
         if persist_to_disk:
-            self._save_result(
-                cache_id, {"query": cache_key, "records": records})
+            self._save_result(cache_id, {"query": cache_key, "records": records})
         return records
 
     def _api_search(self, params: dict[str, str | int]) -> dict[str, Any] | None:
@@ -147,8 +142,7 @@ class IndianKanoonScraper(BaseScraper):
         with httpx.Client(timeout=timeout) as client:
             r = client.post(url, data=form, headers=headers)
             if r.status_code == 403:
-                logger.error(
-                    "Indian Kanoon returned 403 — check INDIAN_KANOON_API_TOKEN")
+                logger.error("Indian Kanoon returned 403 — check INDIAN_KANOON_API_TOKEN")
                 return None
             r.raise_for_status()
             return r.json()
@@ -195,8 +189,11 @@ class IndianKanoonScraper(BaseScraper):
                     "title": random.choice(titles),
                     "headline": text[:200] + "…",
                     "docsource": random.choice(
-                        ["Supreme Court of India", "High Court of Karnataka",
-                            "High Court of Telangana"]
+                        [
+                            "Supreme Court of India",
+                            "High Court of Karnataka",
+                            "High Court of Telangana",
+                        ]
                     ),
                     "publishdate": f"{random.randint(2018, 2025)}-{random.randint(1, 12):02d}-01",
                     "full_text_plain": text,
@@ -232,7 +229,9 @@ class IndianKanoonScraper(BaseScraper):
                     else "Not clearly property-centric from excerpt; review full judgment."
                 ),
             },
-            "source": "indiankanoon_api" if not raw.get("is_synthetic") else "indiankanoon_synthetic",
+            "source": "indiankanoon_api"
+            if not raw.get("is_synthetic")
+            else "indiankanoon_synthetic",
             "language": "en",
             "doc_type": "court_judgment",
             "is_synthetic": raw.get("is_synthetic", False),

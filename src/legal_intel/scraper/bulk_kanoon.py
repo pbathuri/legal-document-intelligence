@@ -3,6 +3,7 @@
 Requires a real API token (no synthetic fallback). Respects Settings.scraper_rate_limit
 between requests. Use `legal-scrape-bulk kanoon` from the CLI.
 """
+
 from __future__ import annotations
 
 import json
@@ -65,8 +66,7 @@ def _rebuild_seen_tids(corpus_path: Path) -> set[int]:
             tid = row.get("tid")
             if tid is not None:
                 seen.add(int(tid))
-    logger.info("Resuming: %d unique tids already in %s",
-                len(seen), corpus_path)
+    logger.info("Resuming: %d unique tids already in %s", len(seen), corpus_path)
     return seen
 
 
@@ -127,8 +127,7 @@ def _backfill_missing_full_text(
         ft_budget -= 1
         changed = True
         if log_every > 0 and fetched % log_every == 0:
-            logger.info(
-                "Full-text backfill: fetched %d documents so far", fetched)
+            logger.info("Full-text backfill: fetched %d documents so far", fetched)
 
     if changed:
         tmp = corpus_path.with_suffix(corpus_path.suffix + ".tmp")
@@ -222,8 +221,7 @@ def run_bulk_kanoon(
         buffer = []
 
     def save_checkpoint() -> None:
-        ck_path.write_text(json.dumps(
-            ck, indent=2, ensure_ascii=False), encoding="utf-8")
+        ck_path.write_text(json.dumps(ck, indent=2, ensure_ascii=False), encoding="utf-8")
 
     ft_budget = max_full_text_total if fetch_full_text else 0
 
@@ -251,8 +249,7 @@ def run_bulk_kanoon(
             try:
                 data = _search_with_retry(scraper, params)
             except Exception as e:
-                logger.error(
-                    "Search failed for query=%r pagenum=%s: %s", query, pagenum, e)
+                logger.error("Search failed for query=%r pagenum=%s: %s", query, pagenum, e)
                 save_checkpoint()
                 raise
 
@@ -266,8 +263,7 @@ def run_bulk_kanoon(
 
             docs = data.get("docs") or []
             if not docs:
-                logger.info(
-                    "No more results for query=%r at pagenum=%s", query, pagenum)
+                logger.info("No more results for query=%r at pagenum=%s", query, pagenum)
                 break
 
             for doc in docs:
@@ -299,9 +295,7 @@ def run_bulk_kanoon(
                         full = None
                     if full:
                         raw_html = full.get("doc") or ""
-                        rec["full_text_plain"] = (
-                            _strip_html(raw_html) if raw_html else ""
-                        )
+                        rec["full_text_plain"] = _strip_html(raw_html) if raw_html else ""
                         rec["cite"] = full.get("cite")
                         ft_budget -= 1
                         stats["full_text_fetched"] += 1
@@ -352,6 +346,5 @@ def run_bulk_kanoon(
 
 def load_queries_from_file(path: Path) -> list[str]:
     lines = path.read_text(encoding="utf-8").splitlines()
-    out = [ln.strip() for ln in lines if ln.strip()
-           and not ln.strip().startswith("#")]
+    out = [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
     return out

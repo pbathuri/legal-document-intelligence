@@ -28,7 +28,8 @@ def _mock_instrument_fact(doc_id: str, doc_label: str, context_text: str) -> Ins
     if not sellers and not buyers:
         buyers = ["Unknown party (mock)"]
     parcels = re.findall(
-        r"(?:survey|plot|khata|patta|ULPIN|CTS)[\s:No.]*[\w\-/]+", context_text, re.I)
+        r"(?:survey|plot|khata|patta|ULPIN|CTS)[\s:No.]*[\w\-/]+", context_text, re.I
+    )
     ev: list[Evidence] = []
     if context_text.strip():
         ev.append(Evidence(page=1, quote=context_text[:200].strip()))
@@ -89,7 +90,8 @@ def extract_instrument_fact(doc_id: str, doc_label: str, context_text: str) -> I
         return InstrumentFact.model_validate(data)
     except Exception:
         raw2 = chat_complete(
-            EXTRACTION_SYSTEM + "\nYour previous output was invalid JSON. Reply with ONLY valid JSON.",
+            EXTRACTION_SYSTEM
+            + "\nYour previous output was invalid JSON. Reply with ONLY valid JSON.",
             user + f"\n\nINVALID_OUTPUT:\n{raw[:4000]}",
             temperature=0.0,
             max_tokens=2048,
