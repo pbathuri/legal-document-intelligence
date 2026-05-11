@@ -1,0 +1,34 @@
+scripts/run_ollama_local.sh
+  s_c7571ff3b984be::t_1d084138642b0f 1-50,53-54,56-95
+  s_c7571ff3b984be::t_754661017293fc 51-52,55
+src/legal_intel/config.py
+  s_c7571ff3b984be::t_25f1b7fdd52bed 36-37
+.env.example
+  s_c7571ff3b984be::t_9dd7359a781b68 20-24
+src/legal_intel/api/main.py
+  s_c7571ff3b984be::t_966913a45d54e1 1514,1529,1582
+README.md
+  s_c7571ff3b984be::t_c65efda0521a33 235-236,239,241-245
+  s_c7571ff3b984be::t_7d768900a604f1 84-86,90-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "cee82553abdfa469c6ec73b47c9dc1404fba510d",
+  "prompts": {},
+  "humans": {
+    "h_ec613b3074a81b": {
+      "author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_c7571ff3b984be": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f6521d88-8f70-4dad-909b-be14f4a0ab33",
+        "model": "gpt-5.5"
+      },
+      "human_author": "pbathuri <taaffeite.aart@gmail.com>"
+    }
+  }
+}
