@@ -1511,7 +1511,7 @@ def ollama_generate_native(body: OllamaGenerateRequest) -> dict[str, Any]:
         return ollama_native_generate(
             s.ollama_base_url,
             payload,
-            timeout_seconds=max(60.0, s.ollama_probe_timeout_seconds * 30),
+            timeout_seconds=max(240.0, s.ollama_probe_timeout_seconds * 120),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1526,7 +1526,7 @@ def ollama_generate_native_batch(body: OllamaGenerateBatchRequest) -> OllamaGene
     Each item succeeds or fails independently (timeouts/errors captured per index).
     """
     s = get_settings()
-    timeout = max(120.0, s.ollama_probe_timeout_seconds * 60)
+    timeout = max(240.0, s.ollama_probe_timeout_seconds * 120)
     items: list[OllamaGenerateBatchItem] = []
     model = body.model.strip()
     max_chars = 256_000
@@ -1579,7 +1579,7 @@ def ollama_chat_native(body: OllamaChatRequest) -> dict[str, Any]:
         return ollama_native_chat(
             s.ollama_base_url,
             payload,
-            timeout_seconds=max(120.0, s.ollama_probe_timeout_seconds * 60),
+            timeout_seconds=max(240.0, s.ollama_probe_timeout_seconds * 120),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

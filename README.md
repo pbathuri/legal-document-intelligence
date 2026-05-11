@@ -81,14 +81,13 @@ The interactive dashboard at repo root (`index.html`) is designed for **static h
 
 ```bash
 pip install -e ".[dev]"
-export LEGAL_INTEL_MOCK_LLM=1          # or 0 + configure LLM below
-export QDRANT_URL=:memory:             # or http://localhost:6333 with docker compose up -d
-# CPU / CI-friendly embeddings (matches tests/conftest.py). Omit these only if you use Ollama embeddings.
-export EMBEDDING_PROVIDER=sentence_transformers
-export EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-legal-api
+ollama pull nomic-embed-text          # embeddings through Ollama /api/embed
+# Uses the running Ollama daemon, pulls/checks embeddings, selects a runnable local LLM, and starts FastAPI.
+scripts/run_ollama_local.sh
 # → http://127.0.0.1:8080  (override with LEGAL_INTEL_API_PORT)
 ```
+
+For CI/offline fallback, use `EMBEDDING_PROVIDER=sentence_transformers` with `EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2`.
 
 2. Endpoints (selection):
    - `GET /health` — mock/live LLM, embedding provider, Qdrant, resolved multimodel names; when `LLM_PROVIDER=ollama`, lists models from local **Ollama** `/api/tags`
@@ -233,14 +232,17 @@ legal-api
 Ollama exposes an OpenAI-compatible HTTP API. Example:
 
 ```bash
-ollama pull llama3.2
+ollama pull gemma3              # or any local model that supports /api/generate
+ollama pull nomic-embed-text
 export LLM_PROVIDER=ollama
 export OLLAMA_BASE_URL=http://localhost:11434/v1
-export LLM_MODEL=llama3.2
+export LLM_MODEL=gemma3
 # Optional per-task models (fallback: LLM_MODEL)
-export LLM_MODEL_EXTRACTION=llama3.2
-export LLM_MODEL_SPECIALIST=llama3.2
-export LLM_MODEL_SYNTHESIS=llama3.2
+export LLM_MODEL_EXTRACTION=gemma3
+export LLM_MODEL_SPECIALIST=gemma3
+export LLM_MODEL_SYNTHESIS=gemma3
+export EMBEDDING_PROVIDER=ollama
+export OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 export LEGAL_INTEL_MOCK_LLM=0
 legal-api
 ```
